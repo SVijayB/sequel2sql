@@ -1,7 +1,7 @@
 <!-- ⚠️⚠️ Do Not Delete These Comments. ⚠️⚠️ -->
 <!-- Please read these comments/instructions carefully and do accordingly  -->
-<!-- Read our contributing document : https://github.com/SVijayB/Repo-Template/blob/master/.github/CONTRIBUTING.md -->
-<!-- Read our Rules of Conduct: https://github.com/SVijayB/Repo-Template/blob/master/.github/CODE_OF_CONDUCT.md -->
+<!-- Read our contributing document : https://github.com/SVijayB/sequel2sql/blob/master/.github/CONTRIBUTING.md -->
+<!-- Read our Rules of Conduct: https://github.com/SVijayB/sequel2sql/blob/master/.github/CODE_OF_CONDUCT.md -->
 <!--- Provide a general summary of your changes in the Title above -->
 
 ### Description

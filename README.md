@@ -1,32 +1,32 @@
-# Repo-Template
+# Sequel2SQL
 
 <p align="center">
-    <img src="assets/Logo.png" alt="Logo" border="0">
-    <br>Short description of the project
+    <img src="assets/logo.png" alt="Logo" border="0">
+    <br>An agentic LLM + RAG framework for PostgreSQL error diagnosis, optimization, and correction.
 </p>
 
 ---
 
 <p align="center">
-    <a href="https://github.com/SVijayB/Repo-Template/pulls">
-        <img src="https://img.shields.io/github/issues-pr/SVijayB/Repo-Template.svg?style=for-the-badge&amp;logo=opencollective" alt="GitHub pull-requests">
+    <a href="https://github.com/SVijayB/sequel2sql/pulls">
+        <img src="https://img.shields.io/github/issues-pr/SVijayB/sequel2sql.svg?style=for-the-badge&amp;logo=opencollective" alt="GitHub pull-requests">
     </a>
-<a href="https://github.com/SVijayB/Repo-Template/issues">
-    <img src="https://img.shields.io/github/issues/SVijayB/Repo-Template.svg?style=for-the-badge&amp;logo=testcafe" alt="GitHub issues">
+<a href="https://github.com/SVijayB/sequel2sql/issues">
+    <img src="https://img.shields.io/github/issues/SVijayB/sequel2sql.svg?style=for-the-badge&amp;logo=testcafe" alt="GitHub issues">
     </a>
-<a href="https://github.com/SVijayB/Repo-Template/graphs/contributors">
-    <img src="https://img.shields.io/github/contributors/SVijayB/Repo-Template.svg?style=for-the-badge&amp;logo=bandsintown" alt="GitHub contributors">
+<a href="https://github.com/SVijayB/sequel2sql/graphs/contributors">
+    <img src="https://img.shields.io/github/contributors/SVijayB/sequel2sql.svg?style=for-the-badge&amp;logo=bandsintown" alt="GitHub contributors">
     </a>
-<a href="https://github.com/SVijayB/Repo-Template/blob/master/LICENSE">
-    <img src="https://img.shields.io/github/license/SVijayB/Repo-Template?style=for-the-badge&amp;logo=appveyor" alt="GitHub license">
+<a href="https://github.com/SVijayB/sequel2sql/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/SVijayB/sequel2sql?style=for-the-badge&amp;logo=appveyor" alt="GitHub license">
     </a>
-<a href="https://github.com/SVijayB/Repo-Template">
-    <img src="https://img.shields.io/github/repo-size/SVijayB/Repo-Template?style=for-the-badge&amp;logo=git" alt="GitHub repo size">
+<a href="https://github.com/SVijayB/sequel2sql">
+    <img src="https://img.shields.io/github/repo-size/SVijayB/sequel2sql?style=for-the-badge&amp;logo=git" alt="GitHub repo size">
     </a>
-<a href="https://github.com/SVijayB/Repo-Template/blob/master/.github/CODE_OF_CONDUCT.md">
+<a href="https://github.com/SVijayB/sequel2sql/blob/master/.github/CODE_OF_CONDUCT.md">
     <img src="https://img.shields.io/badge/code%20of-conduct-ff69b4.svg?style=for-the-badge&amp;logo=crowdsource" alt="Code of Conduct">
     </a>
-<a href="https://github.com/SVijayB/Repo-Template/blob/master/.github/CONTRIBUTING.md">
+<a href="https://github.com/SVijayB/sequel2sql/blob/master/.github/CONTRIBUTING.md">
     <img src="https://img.shields.io/static/v1?style=for-the-badge&amp;logo=opensourceinitiative&amp;label=Open&amp;message=Source%20%E2%9D%A4%EF%B8%8F&amp;color=blueviolet" alt="Open Source Love svg1">
     </a>
 </p>
@@ -44,51 +44,51 @@
 
 <!--- Insert product screenshot below --->
 
-![Product Screenshot](https://media.giphy.com/media/L1R1tvI9svkIWwpVYr/giphy.gif)
+This is a capstone project for the MS in Data Science program at the University of Washington, Seattle, sponsored by Microsoft and guided by [Dhruv Relwani](https://www.linkedin.com/in/dhruvrelwani/).
 
-<!--- replace with motivation for your project --->
+The primary objective of this project was to build a system that can help data engineers in diagnosing, optimizing, and correcting SQL queries for PostgreSQL databases. While most LLMs are good at generating SQL queries from natural language (NL2SQL), they often struggle with fixing error queries and that is where Sequel2SQL comes in.
 
-In order to easily to create a new project, I have created a standard template for the all my projects.
-This template currently contains the following features:
+Sequel2SQL uses retrieval-augmented generation and agent-based workflows by leveraging database schemas, official documentation, and past correction examples, making SQL debugging more reliable and easier to reason about, thereby impoving accuracy of query corrections.
 
--   Issue templates.
--   Pull request templates.
--   Contributing guidelines.
--   Code of conduct.
--   Required resources to help people start contributing.
--   README.md file with a basic setup.
+<p align="center">
+    <img src="assets/flowchart.jpg" alt="Product Screenshot">
+</p>
 
-Simply search and replace `Repo-Template` with the name of your project.
-
-Or, you can use the `assets\template-script.py` to automate the process.
-Run the file by using the following command, `py template-script.py`.
 
 ## Installation
 
-<!--- Provide instructions on installing the application --->
+For the latest stable version, head to [releases](https://github.com/SVijayB/sequel2sql/releases) and download the source code, or clone the repository directly:
 
-For the latest stable version, head to [Releases](https://github.com/SVijayB/Repo-Template/releases).
+```bash
+git clone https://github.com/SVijayB/sequel2sql
+cd sequel2sql
+```
 
-Download and extract the source code.
+### Prerequisites
 
-As an alternative, you could also clone the repository using,
+This project uses [uv](https://github.com/astral-sh/uv) for fast, reliable Python package management. Install it with:
 
-<pre>
-git clone https://github.com/SVijayB/Repo-Template
-</pre>
+```bash
+pip install uv
+```
 
-Once you have the source code, create a virtual environment using the following command,
-`python3 -m venv venv`
+### Setup
 
-Enter the virtual environment and install dependancies using `pip install -r requirements.txt`.
+Install dependencies:
+
+```bash
+uv sync
+```
+
+This automatically creates a virtual environment and installs all required packages.
 
 ## Usage
 
-<!--- Provide instructions on how to use the application after installing it --->
+Run the application:
 
-To launch the file, use the following command, `python3 app.py`.
-
-<!--- You can also add in screenshots, app demo (Gif format) or even provide link to other resources --->
+```bash
+uv run python sequel2sql.py
+```
 
 ### Project demo
 
@@ -98,13 +98,13 @@ You can also find the demo video [here](https://www.youtube.com/watch?v=dQw4w9Wg
 
 ## Contributing
 
-To contribute to Repo-Template, fork the repository, create a new branch and send us a pull request. Make sure you read [CONTRIBUTING.md](https://github.com/SVijayB/Repo-Template/blob/master/.github/CONTRIBUTING.md) before sending us Pull requests.
+To contribute to Sequel2SQL, fork the repository, create a new branch and send us a pull request. Make sure you read [CONTRIBUTING.md](https://github.com/SVijayB/sequel2sql/blob/master/.github/CONTRIBUTING.md) before sending us Pull requests.
 
 Thanks for contributing to Open-source! ❤️
 
 ## License
 
-Repo-Template is under The MIT License. Read the [LICENSE](https://github.com/SVijayB/Repo-Template/blob/master/LICENSE) file for more information.
+Sequel2SQL is under The MIT License. Read the [LICENSE](https://github.com/SVijayB/sequel2sql/blob/master/LICENSE) file for more information.
 
 ---
 
