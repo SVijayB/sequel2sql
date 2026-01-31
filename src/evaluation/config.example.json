@@ -1,0 +1,9 @@
+{
+  "bird_critic_repo_path": "/path/to/BIRD-CRITIC-1-main/BIRD-CRITIC-1-main",
+  "bird_solutions_path": "/path/to/bird_critic_tc/BIRD-Critic-sol",
+  "postgres_dumps_path": "/path/to/BIRD-CRITIC-1-main/BIRD-CRITIC-1-main/evaluation/postgre_table_dumps",
+  "eval_output_dir": "evaluation_output",
+  "postgres_port": 5432,
+  "postgres_user": "root",
+  "postgres_password": "123123"
+}

@@ -1,0 +1,8 @@
+# Sequel2SQL Dependencies
+# Python 3.12+ compatible
+
+sqlglot>=20.0.0
+
+# Development/Testing
+pytest>=7.0.0
+streamlit>=1.28.0

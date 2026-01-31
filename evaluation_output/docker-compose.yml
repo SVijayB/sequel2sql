@@ -1,0 +1,47 @@
+services:
+  postgresql:
+    build:
+      context: D:/Sequel2SQL/Datasets/BIRD-CRITIC-1-main/BIRD-CRITIC-1-main/evaluation
+      dockerfile: ./env/Dockerfile.postgresql
+    container_name: bird_critic_postgresql
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 123123
+      TZ: "Asia/Hong_Kong"
+    volumes:
+      - postgresql_data:/var/lib/postgresql/data
+      - D:/Sequel2SQL/Datasets/BIRD-CRITIC-PG/postgre_table_dumps/postgre_table_dumps:/docker-entrypoint-initdb.d/postgre_table_dumps
+    command:
+      - "-c"
+      - "max_connections=300"
+      - "-c"
+      - "shared_buffers=256MB"
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  so_eval_env:
+    build:
+      context: D:/Sequel2SQL/Datasets/BIRD-CRITIC-1-main/BIRD-CRITIC-1-main/evaluation
+      dockerfile: ./env/Dockerfile.so_eval
+    container_name: so_eval_env
+    volumes:
+      - D:/Sequel2SQL/Datasets/BIRD-CRITIC-1-main/BIRD-CRITIC-1-main/evaluation:/app/evaluation
+      - D:/Sequel2SQL/Datasets/BIRD-CRITIC-PG/postgre_table_dumps/postgre_table_dumps:/app/postgre_table_dumps
+      - D:/Sequel2SQL/sequel2sql/evaluation_output:/app/eval_output
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    command: ["tail", "-f", "/dev/null"]
+    environment:
+      POSTGRES_HOST: postgresql
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 123123
+
+volumes:
+  postgresql_data:
