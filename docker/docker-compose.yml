@@ -32,33 +32,6 @@ services:
       timeout: 5s
       retries: 5
 
-  mysql:
-    image: mysql:8.4.0
-    container_name: sequel2sql_mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123123}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-mysql}
-      TZ: ${TZ:-UTC}
-    volumes:
-      - mysql_data:/var/lib/mysql
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # Spider 1.0 uses SQLite (file-based). Mount spider1_databases when running dbdex
-  # or copy Spider 1.0 .sqlite files from Yale into this volume.
-  # Optional: lightweight service that just holds the volume for SQLite files.
-  sqlite-mount:
-    image: alpine:3.19
-    container_name: sequel2sql_sqlite_mount
-    volumes:
-      - spider1_databases:/data/spider1
-    entrypoint: ["/bin/sh", "-c", "echo 'SQLite data volume mounted at /data/spider1'; sleep infinity"]
-
   # dbdex client: run dbdex against postgres/mysql (or host SQLite paths).
   # Install: docker compose -f docker/docker-compose.yml run --rm dbdex python -m dbdex --help
   # Example: docker compose -f docker/docker-compose.yml run --rm -e OPENAI_API_KEY=xxx dbdex \
@@ -72,21 +45,15 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-root}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123123}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123123}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
-      - spider1_databases:/data/spider1
       - ../src:/app/src
     depends_on:
       postgres:
-        condition: service_healthy
-      mysql:
         condition: service_healthy
     profiles:
       - client
 
 volumes:
   postgres_data:
-  mysql_data:
-  spider1_databases:
