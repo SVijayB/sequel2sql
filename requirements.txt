@@ -2,6 +2,11 @@
 # Python 3.12+ compatible
 
 sqlglot>=20.0.0
+python-dotenv>=1.0.0
+google-generativeai>=0.8.0
+google-genai>=1.0.0
+pyasn1>=0.6.0
+pyasn1-modules>=0.4.0
 
 # Development/Testing
 pytest>=7.0.0

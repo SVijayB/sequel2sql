@@ -25,9 +25,11 @@ class EvaluationConfig:
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     google_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
     
     # Model configuration
     model_name: str = "gpt-4o-2024-0806"
+    gemini_model: str = "gemma-3-27b-it"  # Gemma 3 27B (same API key as Gemini)
     
     # Docker configuration
     postgres_port: int = 5432
@@ -72,6 +74,41 @@ def load_config(config_path: Optional[str] = None) -> EvaluationConfig:
     Returns:
         EvaluationConfig instance with loaded configuration.
     """
+    # Load .env so GEMINI_API_KEY / GOOGLE_API_KEY etc. are available
+    project_root = Path(__file__).resolve().parent.parent.parent
+    _env_bases = [Path.cwd(), project_root]
+    try:
+        from dotenv import load_dotenv
+        # utf-8-sig strips BOM (common on Windows); load from cwd then project root
+        for base in _env_bases:
+            env_path = base / ".env"
+            if env_path.exists():
+                load_dotenv(env_path, encoding="utf-8-sig")
+    except ImportError:
+        pass
+
+    # Fallback: if key still missing, parse .env manually (handles BOM/encoding quirks)
+    if not os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
+        for base in _env_bases:
+            env_path = base / ".env"
+            if not env_path.exists():
+                continue
+            try:
+                with open(env_path, "r", encoding="utf-8-sig") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        key, _, value = line.partition("=")
+                        key, value = key.strip(), value.strip()
+                        if key in ("GEMINI_API_KEY", "GOOGLE_API_KEY") and value:
+                            value = value.strip("'\"").strip()
+                            if value:
+                                os.environ[key] = value
+                                break
+            except Exception:
+                continue
+
     # Try to load from config file first
     if config_path is None:
         # Look for config.json in the evaluation directory
@@ -115,11 +152,22 @@ def load_config(config_path: Optional[str] = None) -> EvaluationConfig:
         "GOOGLE_API_KEY",
         config_dict.get("google_api_key")
     )
-    
+    # Gemini accepts either GEMINI_API_KEY or GOOGLE_API_KEY (same key works for both)
+    config_dict["gemini_api_key"] = (
+        os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or config_dict.get("gemini_api_key")
+        or config_dict.get("google_api_key")
+    )
+
     # Model configuration
     config_dict["model_name"] = os.getenv(
         "EVAL_MODEL_NAME",
         config_dict.get("model_name", "gpt-4o-2024-0806")
+    )
+    config_dict["gemini_model"] = os.getenv(
+        "GEMINI_MODEL",
+        config_dict.get("gemini_model", "gemma-3-27b-it")
     )
     
     # Docker configuration

@@ -108,6 +108,8 @@ def load_solution_jsonl(jsonl_path: str) -> List[Dict]:
 def find_solution_files(extracted_dir: str) -> List[str]:
     """Find all JSONL solution files in the extracted directory.
     
+    Skips macOS metadata (e.g. __MACOSX, ._*) which are not real JSONL.
+    
     Args:
         extracted_dir: Directory containing extracted solution files.
     
@@ -117,9 +119,12 @@ def find_solution_files(extracted_dir: str) -> List[str]:
     solution_files = []
     extracted_path = Path(extracted_dir)
     
-    # Look for JSONL files in the directory
     for jsonl_file in extracted_path.rglob("*.jsonl"):
-        solution_files.append(str(jsonl_file))
+        path_str = str(jsonl_file)
+        # Skip macOS zip metadata: __MACOSX dir and ._* resource-forks
+        if "__MACOSX" in path_str or jsonl_file.name.startswith("._"):
+            continue
+        solution_files.append(path_str)
     
     return solution_files
 
