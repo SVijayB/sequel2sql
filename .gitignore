@@ -1,1 +1,5 @@
 .vscode
+.cache/
+BIRD-CRITIC-1/
+main.py
+BIRD-Critic-sol

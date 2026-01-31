@@ -37,6 +37,7 @@
 -   [Installation](#Installation)
 -   [Usage](#Usage)
     -   [Project Demo](#Demo)
+-   [Docker (BIRD-Critic, Spider 1.0/2.0 + dbdex)](#Docker)
 -   [Contributing](#Contributing)
 -   [License](#License)
 
@@ -54,6 +55,18 @@ Sequel2SQL uses retrieval-augmented generation and agent-based workflows by leve
     <img src="assets/flowchart.jpg" alt="Product Screenshot">
 </p>
 
+
+## Docker (BIRD-Critic, Spider 1.0/2.0 + dbdex)
+
+A Docker Compose stack provides the SQL engine versions used by **BIRD-Critic** (PostgreSQL 14.12, MySQL 8.4.0), **Spider 1.0** (SQLite), and **Spider 2.0** (PostgreSQL, SQLite), and is compatible with [dbdex](https://github.com/Finndersen/dbdex) for natural-language queries.
+
+```bash
+cp docker/.env.example docker/.env
+docker compose -f docker/docker-compose.yml up -d postgres mysql
+# Use dbdex with: postgresql://root:123123@localhost:5432/postgres
+```
+
+See **[docker/README.md](docker/README.md)** for connection strings and usage with dbdex.
 
 ## Installation
 
