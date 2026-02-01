@@ -13,7 +13,7 @@ import hashlib
 
 from sqlglot import exp
 
-from ast_parsers.errors import QueryMetadata
+from src.ast_parsers.errors import QueryMetadata
 
 
 # =============================================================================
