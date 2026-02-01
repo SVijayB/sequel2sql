@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Sequel2SQL is an agentic LLM + RAG framework for PostgreSQL error diagnosis, optimization, and correction. While most LLMs excel at generating SQL from natural language (NL2SQL), they struggle with fixing erroneous queries. This project addresses that gap using retrieval-augmented generation and agent-based workflows, leveraging database schemas, official documentation, and past correction examples.
+Sequel2SQL is an agentic LLM + RAG framework for SQL error diagnosis, optimization, and correction. While most LLMs excel at generating SQL from natural language (NL2SQL), they struggle with fixing erroneous queries. This project addresses that gap using retrieval-augmented generation and agent-based workflows, leveraging database schemas, official documentation, and past correction examples.
 
 **Project Context:**
 - Capstone project for MS in Data Science, University of Washington
@@ -74,7 +74,7 @@ uv sync
 **Planned Components (Coming Soon):**
 - **RAG Pipeline**: Will retrieve context from database schemas, PostgreSQL documentation, and historical query corrections
 - **AST Parser**: Will parse and embed user queries to database for semantic search
-- **Error Diagnosis Flow**: Will analyze PostgreSQL errors, retrieve relevant context, and generate corrections
+- **Error Diagnosis Flow**: Will analyze SQL errors, retrieve relevant context, and generate corrections
 
 The planned system workflow (see [assets/flowchart.jpg](assets/flowchart.jpg)):
 1. Receive erroneous SQL query

@@ -1,13 +1,16 @@
 """
 Sequel2SQL Agent
 
-A Pydantic AI agent using Google Gemma 3 27B for PostgreSQL query assistance.
+A Pydantic AI agent using LLMs for SQL query assistance.
 This is the foundational agent before adding RAG and AST components.
 """
 
 from typing import Optional, Dict, List
 from pydantic import BaseModel
 from pydantic_ai import Agent
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Optional: Configure LogFire for monitoring and debugging
 # Uncomment the lines below after running: uv run logfire auth
@@ -93,7 +96,6 @@ agent = Agent(
 		'When fixing errors, explain what was wrong and why your solution works.'
 	)
 )
-
 
 # =============================================================================
 # Tool Definitions
