@@ -547,14 +547,14 @@ def run_query(
 ) -> QueryResult:
     """
     Execute a SQL query on the specified database dialect.
-    
+
     This is the main function to execute SQL queries across different databases.
-    It handles container startup, query execution, and returns both the query 
+    It handles container startup, query execution, and returns both the query
     results and execution statistics.
 
     Args:
         query: SQL query to execute (e.g., "SELECT * FROM users")
-        dialect: Database dialect - "postgres" (default), "mysql", "sqlserver", 
+        dialect: Database dialect - "postgres" (default), "mysql", "sqlserver",
                 "oracle", or "sqlite"
         start_container: Whether to start the Docker container (default: True)
         wait_seconds: Seconds to wait for container to be ready (default: 10)
@@ -570,13 +570,13 @@ def run_query(
             - error: str - Error message if query failed
             - query: str - The executed query
             - dialect: str - The database dialect used
-    
+
     Examples:
         >>> # Execute a PostgreSQL query
         >>> result = run_query("SELECT version()", dialect="postgres")
         >>> print(result.rows)  # [{'version': 'PostgreSQL 14.12...'}]
         >>> print(result.execution_time_ms)  # 45.23
-        
+
         >>> # Execute a MySQL query
         >>> result = run_query("SELECT * FROM users WHERE age > 18", dialect="mysql")
         >>> if result.success:
