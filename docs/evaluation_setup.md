@@ -134,19 +134,54 @@ This will:
 - Run evaluation script on predictions
 - Save results to `{EVAL_OUTPUT_DIR}/data/results/`
 
-### Step 4: Sequel2SQL Integration
+### Step 4: Sequel2SQL Integration (Gemini baseline)
 
-Test sequel2sql on the BIRD-CRITIC dataset:
+Run the Gemini baseline (eval-ready output):
 
 ```bash
+# Set GEMINI_API_KEY in .env at project root
 python -m src.evaluation.sequel2sql_integration
 ```
 
 This will:
-- Load BIRD-CRITIC instances
-- Analyze each instance using sequel2sql's validator and analyzers
-- Compare results with baseline predictions (if available)
-- Generate comparison reports
+- Load the combined dataset and prompt Gemini (query + issue_sql) per instance
+- Extract `pred_sqls` from ```sql...``` blocks in responses
+- Save an **eval-ready** file to `{EVAL_OUTPUT_DIR}/data/results/baseline_gemini_final_output.jsonl` (each row has `pred_sqls` and all fields BIRD-CRITIC evaluation expects)
+
+---
+
+### End-to-end evaluation (BIRD-CRITIC official eval)
+
+To run the official BIRD-CRITIC evaluation on the baseline output:
+
+1. **Prepare data and run baseline** (in this repo):
+   ```bash
+   python -m src.evaluation.data_preparation
+   python -m src.evaluation.sequel2sql_integration
+   ```
+   Output: `{eval_output_dir}/data/results/baseline_gemini_final_output.jsonl`
+
+2. **Copy baseline to BIRD-CRITIC repo** (optional script):
+   ```bash
+   python -m src.evaluation.copy_baseline_to_bird
+   ```
+   This copies the file to `{bird_critic_repo_path}/evaluation/data/postgresql_300.jsonl` and prints the exact commands for step 4. Or copy manually: create `evaluation/data/` in the BIRD-CRITIC repo if needed, then copy `baseline_gemini_final_output.jsonl` to `evaluation/data/postgresql_300.jsonl`.
+
+3. **In the BIRD-CRITIC repo**: Enable the PostgreSQL service in `evaluation/docker-compose.yml` (uncomment the postgresql service and its dependency in so_eval_env).
+
+4. **Run evaluation** (from BIRD-CRITIC repo):
+   ```bash
+   cd evaluation
+   docker compose up --build
+   ```
+   Then in another terminal:
+   ```bash
+   docker compose exec so_eval_env bash
+   cd run
+   # Ensure dialect=postgresql and mode=pred in run_eval.sh
+   bash run_eval.sh
+   ```
+   The report and status file are written next to the JSONL (e.g. `*_output_with_status.jsonl`).
 
 ## Output Files
 
