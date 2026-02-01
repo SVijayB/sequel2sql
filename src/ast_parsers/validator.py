@@ -187,8 +187,37 @@ def _classify_syntax_error(sql: str, error: ParseError) -> list:
             error_code=error_code,
             taxonomy_category=taxonomy_category or "syntax",
         ))
-    
-    # 4. If no specific tag found, use general keyword misuse
+
+    msg_lower = error_message.lower()
+    if not errors and ("expecting )" in msg_lower or "expecting (" in msg_lower):
+        errors.append(ValidationError(
+            tag=SyntaxErrorTags.UNBALANCED_TOKENS,
+            message=error_message,
+            location=location,
+            context="Parser reported expecting parenthesis",
+            error_code=error_code,
+            taxonomy_category=taxonomy_category or "syntax",
+        ))
+    if not errors and ("unexpected token" in msg_lower or "invalid expression" in msg_lower):
+        errors.append(ValidationError(
+            tag=SyntaxErrorTags.INVALID_TOKEN,
+            message=error_message,
+            location=location,
+            error_code=error_code,
+            taxonomy_category=taxonomy_category or "syntax",
+        ))
+    if not errors and (
+        "unknown option" in msg_lower
+        or "unsupported syntax" in msg_lower
+        or "falling back to parsing as" in msg_lower
+    ):
+        errors.append(ValidationError(
+            tag=SyntaxErrorTags.UNSUPPORTED_DIALECT,
+            message=error_message,
+            location=location,
+            error_code=error_code,
+            taxonomy_category=taxonomy_category or "syntax",
+        ))
     if not errors:
         errors.append(ValidationError(
             tag=SyntaxErrorTags.KEYWORD_MISUSE,
@@ -197,7 +226,7 @@ def _classify_syntax_error(sql: str, error: ParseError) -> list:
             error_code=error_code,
             taxonomy_category=taxonomy_category or "syntax",
         ))
-    
+
     return errors
 
 

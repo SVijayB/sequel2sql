@@ -12,6 +12,8 @@ class SyntaxErrorTags:
     TRAILING_DELIMITER = "syntax_trailing_delimiter"
     KEYWORD_MISUSE = "syntax_keyword_misuse"
     UNTERMINATED_STRING = "syntax_unterminated_string"
+    INVALID_TOKEN = "syntax_invalid_token"
+    UNSUPPORTED_DIALECT = "syntax_unsupported_dialect"
 
 
 class SchemaErrorTags:

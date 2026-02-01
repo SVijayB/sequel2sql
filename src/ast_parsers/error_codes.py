@@ -57,6 +57,8 @@ TAXONOMY_CATEGORIES: Dict[str, List[str]] = {
         "syntax_trailing_delimiter",
         "syntax_keyword_misuse",
         "syntax_unterminated_string",
+        "syntax_invalid_token",
+        "syntax_unsupported_dialect",
         "syntax_invalid_name",
         "syntax_invalid_column_definition",
     ],
