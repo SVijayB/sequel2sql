@@ -1,187 +1,166 @@
 # -*- coding: utf-8 -*-
-"""
-Error types and validation result classes for SQL query validation.
-"""
+"""Error types and validation result classes for SQL query validation."""
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 
-
-# =============================================================================
-# Error Tag Constants
-# =============================================================================
 
 class SyntaxErrorTags:
-    """Tags for Part 1: Static Analysis errors."""
-    
+    """Static analysis (syntax) error tags."""
     SYNTAX_ERROR = "syntax_error"
-    """General syntax/parse error."""
-    
     UNBALANCED_TOKENS = "syntax_unbalanced_tokens"
-    """Mismatched parentheses, brackets, or quotes."""
-    
     TRAILING_DELIMITER = "syntax_trailing_delimiter"
-    """Trailing comma or delimiter before keyword (common LLM artifact)."""
-    
     KEYWORD_MISUSE = "syntax_keyword_misuse"
-    """Incorrect keyword usage or ordering."""
-    
     UNTERMINATED_STRING = "syntax_unterminated_string"
-    """Unterminated quoted string literal."""
 
 
 class SchemaErrorTags:
-    """Tags for Part 2: Semantic Validation errors."""
-    
+    """Semantic (schema) error tags."""
     HALLUCINATION_TABLE = "schema_hallucination_table"
-    """Referenced table does not exist in schema."""
-    
     HALLUCINATION_COLUMN = "schema_hallucination_col"
-    """Referenced column does not exist in schema."""
-    
     AMBIGUOUS_COLUMN = "schema_ambiguous_col"
-    """Column reference is ambiguous (exists in multiple tables)."""
-    
     TYPE_MISMATCH = "schema_type_mismatch"
-    """Type mismatch in expression or comparison."""
-    
     UNKNOWN_ERROR = "schema_unknown_error"
-    """Unclassified schema validation error."""
-    
     DUPLICATE_OBJECT = "schema_duplicate_object"
-    """Duplicate object (table, column, etc.) definition."""
-    
     UNDEFINED_FUNCTION = "schema_undefined_function"
-    """Referenced function does not exist."""
-    
     DATATYPE_MISMATCH = "schema_datatype_mismatch"
-    """Data type mismatch in expression or comparison."""
 
 
 class LogicalErrorTags:
-    """Tags for logical errors (grouping, aggregation, windowing, etc.)."""
-    
+    """Logical error tags (grouping, integrity, etc.)."""
     GROUPING_ERROR = "logical_grouping_error"
-    """Column must appear in GROUP BY clause or be used in aggregate function."""
-    
     AGGREGATION_ERROR = "logical_aggregation_error"
-    """Error in aggregation logic."""
-    
     WINDOWING_ERROR = "logical_windowing_error"
-    """Error in window function usage."""
-    
     INTEGRITY_VIOLATION = "logical_integrity_violation"
-    """Integrity constraint violation."""
-    
     FOREIGN_KEY_VIOLATION = "logical_foreign_key_violation"
-    """Foreign key constraint violation."""
-    
     UNIQUE_VIOLATION = "logical_unique_violation"
-    """Unique constraint violation."""
-    
     CHECK_VIOLATION = "logical_check_violation"
-    """Check constraint violation."""
 
 
 class JoinErrorTags:
-    """Tags for join-related errors."""
-    
+    """Join-related error tags."""
     MISSING_JOIN = "join_missing_join"
-    """Required join is missing."""
-    
     WRONG_JOIN_TYPE = "join_wrong_join_type"
-    """Incorrect join type used."""
-    
     EXTRA_TABLE = "join_extra_table"
-    """Unnecessary table included in query."""
-    
     JOIN_CONDITION_ERROR = "join_condition_error"
-    """Error in join condition."""
 
 
 class AggregationErrorTags:
-    """Tags for aggregation-related errors."""
-    
+    """Aggregation-related error tags."""
     MISSING_GROUPBY = "aggregation_missing_groupby"
-    """Missing GROUP BY clause when required."""
-    
     MISUSE_HAVING = "aggregation_misuse_having"
-    """Incorrect use of HAVING clause."""
-    
     AGGREGATION_ERROR = "aggregation_error"
-    """General aggregation error."""
 
 
 class FilterErrorTags:
-    """Tags for filter condition errors."""
-    
+    """Filter/WHERE error tags."""
     INCORRECT_WHERE_COLUMN = "filter_incorrect_where_column"
-    """Incorrect column used in WHERE clause."""
-    
     TYPE_MISMATCH_WHERE = "filter_type_mismatch_where"
-    """Type mismatch in WHERE clause condition."""
-    
     MISSING_WHERE = "filter_missing_where"
-    """Missing WHERE clause when required."""
 
 
 class SubqueryErrorTags:
-    """Tags for subquery-related errors."""
-    
+    """Subquery-related error tags."""
     UNUSED_SUBQUERY = "subquery_unused_subquery"
-    """Subquery that is not used or referenced."""
-    
     INCORRECT_CORRELATION = "subquery_incorrect_correlation"
-    """Incorrect correlated subquery."""
-    
     SUBQUERY_ERROR = "subquery_error"
-    """General subquery error."""
 
 
 class SetOperationErrorTags:
-    """Tags for set operation errors (UNION, INTERSECT, EXCEPT)."""
-    
+    """Set operation error tags (UNION, INTERSECT, EXCEPT)."""
     UNION_ERROR = "set_union_error"
-    """Error in UNION operation."""
-    
     INTERSECTION_ERROR = "set_intersection_error"
-    """Error in INTERSECT operation."""
-    
     EXCEPT_ERROR = "set_except_error"
-    """Error in EXCEPT operation."""
 
 
 class StructuralErrorTags:
-    """Tags for structural query errors."""
-    
+    """Structural query error tags."""
     MISSING_ORDERBY = "structural_missing_orderby"
-    """Missing ORDER BY clause when required."""
-    
     MISSING_LIMIT = "structural_missing_limit"
-    """Missing LIMIT clause when required."""
-    
     STRUCTURAL_ERROR = "structural_error"
-    """General structural error."""
 
 
-# =============================================================================
-# Data Classes
-# =============================================================================
+# Provenance: pg_diag = PostgreSQL err.diag.* (NOT a DB cursor or editor).
+SOURCE_PG_DIAG_COLUMN_NAME = "pg_diag.column_name"
+SOURCE_PG_DIAG_TABLE_NAME = "pg_diag.table_name"
+SOURCE_PG_DIAG_CONSTRAINT_NAME = "pg_diag.constraint_name"
+SOURCE_PG_DIAG_DATATYPE_NAME = "pg_diag.datatype_name"
+SOURCE_PG_DIAG_SCHEMA_NAME = "pg_diag.schema_name"
+SOURCE_PG_DIAG_POSITION = "pg_diag.position"
+SOURCE_SQLSTATE = "sqlstate"
+SOURCE_REGEX = "regex"
+SOURCE_AST_HEURISTIC = "ast_heuristic"
+
+CONFIDENCE_HIGH = 0.95
+CONFIDENCE_MEDIUM = 0.7
+CONFIDENCE_LOW = 0.4
+
+
+@dataclass(frozen=True)
+class TagWithProvenance:
+    """Error tag with source and confidence (0.0–1.0)."""
+    tag: str
+    source: str
+    confidence: float
+
+    def to_dict(self) -> dict:
+        return {"tag": self.tag, "source": self.source, "confidence": self.confidence}
+
+
+@dataclass
+class Diagnostics:
+    """PostgreSQL error diagnostics (err.diag.*). Fields may be None if not exposed."""
+    message_primary: Optional[str] = None
+    message_detail: Optional[str] = None
+    message_hint: Optional[str] = None
+    context: Optional[str] = None
+    position: Optional[int] = None
+    schema_name: Optional[str] = None
+    table_name: Optional[str] = None
+    column_name: Optional[str] = None
+    datatype_name: Optional[str] = None
+    constraint_name: Optional[str] = None
+    internal_query: Optional[str] = None
+    internal_position: Optional[int] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "message_primary": self.message_primary,
+            "message_detail": self.message_detail,
+            "message_hint": self.message_hint,
+            "context": self.context,
+            "position": self.position,
+            "schema_name": self.schema_name,
+            "table_name": self.table_name,
+            "column_name": self.column_name,
+            "datatype_name": self.datatype_name,
+            "constraint_name": self.constraint_name,
+            "internal_query": self.internal_query,
+            "internal_position": self.internal_position,
+        }
+
+
+@dataclass
+class ErrorContext:
+    """Structured error context: sql, optional ast/sqlstate/diagnostics, tags with provenance."""
+    sql: str
+    ast: Optional[Any] = None
+    sqlstate: Optional[str] = None
+    diagnostics: Optional[Diagnostics] = None
+    tags: List[TagWithProvenance] = field(default_factory=list)
+    
+    def to_dict(self) -> dict:
+        return {
+            "sql": self.sql,
+            "sqlstate": self.sqlstate,
+            "diagnostics": self.diagnostics.to_dict() if self.diagnostics else None,
+            "tags": [t.to_dict() for t in self.tags],
+        }
+
 
 @dataclass
 class ValidationError:
-    """
-    Represents a single validation error with classification.
-    
-    Attributes:
-        tag: Error classification tag (e.g., 'syntax_trailing_delimiter')
-        message: Human-readable error description
-        location: Character position in the SQL string where error occurred (if available)
-        context: Additional context information (e.g., the problematic token)
-        error_code: PostgreSQL SQLSTATE error code (e.g., '42703', '42P01')
-        taxonomy_category: High-level taxonomy category (e.g., 'syntax', 'semantic', 'logical')
-        affected_clauses: List of SQL clauses affected by this error (e.g., ['WHERE', 'JOIN'])
-    """
+    """Single validation error with tag, message, optional location/context/error_code."""
     tag: str
     message: str
     location: Optional[int] = None
@@ -191,7 +170,6 @@ class ValidationError:
     affected_clauses: List[str] = field(default_factory=list)
     
     def to_dict(self) -> dict:
-        """Convert to dictionary representation."""
         result = {
             "tag": self.tag,
             "message": self.message,
@@ -232,7 +210,6 @@ class QueryMetadata:
     num_aggregations: int = 0
     
     def to_dict(self) -> dict:
-        """Convert to dictionary representation."""
         return {
             "complexity_score": self.complexity_score,
             "pattern_signature": self.pattern_signature,
@@ -264,16 +241,13 @@ class ValidationResult:
     
     @property
     def tags(self) -> List[str]:
-        """Get list of all error tags."""
         return [e.tag for e in self.errors]
-    
+
     @property
     def error_messages(self) -> List[str]:
-        """Get list of all error messages."""
         return [e.message for e in self.errors]
-    
+
     def to_dict(self) -> dict:
-        """Convert to dictionary representation (excludes AST)."""
         result = {
             "valid": self.valid,
             "sql": self.sql,

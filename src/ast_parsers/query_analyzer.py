@@ -1,12 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Query Analyzer
-
-Provides functions to analyze SQL query structure:
-- Extract SQL clauses from AST
-- Calculate complexity scores
-- Generate pattern signatures
-"""
+"""Query structure analysis: clauses, complexity, pattern signature."""
 
 from typing import List, Set, Any
 import hashlib
@@ -16,28 +9,13 @@ from sqlglot import exp
 from ast_parsers.errors import QueryMetadata
 
 
-# =============================================================================
-# SQL Clause Extraction
-# =============================================================================
-
 def extract_sql_clauses(ast: Any) -> List[str]:
-    """
-    Extract all SQL clauses present in the query from the AST.
-    
-    Args:
-        ast: sqlglot Expression AST node
-    
-    Returns:
-        List of clause names found (e.g., ['SELECT', 'FROM', 'WHERE', 'JOIN', 'GROUP', 'ORDER'])
-    """
+    """Return sorted list of clause names (SELECT, FROM, WHERE, JOIN, etc.)."""
     if ast is None:
         return []
     
     clauses: Set[str] = set()
-    
-    # Walk the AST to find different clause types
     for node in ast.walk():
-        # SELECT clause
         if isinstance(node, exp.Select):
             clauses.add("SELECT")
         
@@ -52,7 +30,6 @@ def extract_sql_clauses(ast: Any) -> List[str]:
         # JOIN clauses
         if isinstance(node, exp.Join):
             clauses.add("JOIN")
-            # Check join type
             if node.kind:
                 join_type = node.kind.upper()
                 if join_type in ["INNER", "LEFT", "RIGHT", "FULL", "CROSS"]:
@@ -97,7 +74,6 @@ def extract_sql_clauses(ast: Any) -> List[str]:
             if node.args.get("distinct"):
                 clauses.add("DISTINCT")
         
-        # DISTINCT ON (Postgres; sqlglot uses exp.Distinct with "on" expression)
         if isinstance(node, exp.Distinct) and node.args.get("on"):
             clauses.add("DISTINCT_ON")
         
@@ -105,7 +81,6 @@ def extract_sql_clauses(ast: Any) -> List[str]:
         if isinstance(node, (exp.Window, exp.WindowSpec)):
             clauses.add("WINDOW")
         
-        # PARTITION BY (inside window spec)
         if isinstance(node, exp.Partition):
             clauses.add("PARTITION")
         
@@ -113,7 +88,6 @@ def extract_sql_clauses(ast: Any) -> List[str]:
         if isinstance(node, exp.Filter):
             clauses.add("FILTER")
         
-        # LATERAL (lateral subqueries / LATERAL JOIN)
         if isinstance(node, exp.Lateral):
             clauses.add("LATERAL")
         
@@ -121,7 +95,6 @@ def extract_sql_clauses(ast: Any) -> List[str]:
         if isinstance(node, exp.Values):
             clauses.add("VALUES")
         
-        # QUALIFY (filter on window results; sqlglot parses even if not PG-native)
         if isinstance(node, exp.Qualify):
             clauses.add("QUALIFY")
         
@@ -129,7 +102,6 @@ def extract_sql_clauses(ast: Any) -> List[str]:
         if isinstance(node, exp.TableSample):
             clauses.add("TABLESAMPLE")
         
-        # LOCKING (FOR UPDATE, SKIP LOCKED, etc.; sqlglot uses exp.Lock)
         if isinstance(node, exp.Lock):
             clauses.add("LOCKING")
         
@@ -137,7 +109,6 @@ def extract_sql_clauses(ast: Any) -> List[str]:
         if isinstance(node, exp.Subquery):
             clauses.add("SUBQUERY")
         
-        # DML: INSERT, UPDATE, DELETE, MERGE
         if isinstance(node, exp.Insert):
             clauses.add("INSERT")
         if isinstance(node, exp.Update):
@@ -151,20 +122,11 @@ def extract_sql_clauses(ast: Any) -> List[str]:
         if isinstance(node, exp.Returning):
             clauses.add("RETURNING")
     
-    # Sort for consistent output
     return sorted(list(clauses))
 
 
 def get_clause_for_node(node: Any) -> List[str]:
-    """
-    Determine which SQL clause(s) a node belongs to by walking up the AST.
-    
-    Args:
-        node: sqlglot Expression node
-    
-    Returns:
-        List of clause names that contain this node
-    """
+    """Return clause names containing this node (walk up AST)."""
     clauses: Set[str] = set()
     current = node
     
@@ -260,41 +222,31 @@ def calculate_complexity(ast: Any) -> int:
         return 0
     
     score = 0
-    
     for node in ast.walk():
-        # CTEs are more complex (weighted 2)
         if isinstance(node, exp.CTE):
             score += 2
         
         # Subqueries add complexity (weighted 1)
         if isinstance(node, exp.Subquery):
             score += 1
-        
-        # Joins add complexity (weighted 1)
         if isinstance(node, exp.Join):
             score += 1
         
         # Aggregation functions add complexity (weighted 1)
         if isinstance(node, exp.AggFunc):
             score += 1
-        
-        # Case statements add complexity (weighted 1)
         if isinstance(node, exp.Case):
             score += 1
         
         # Set operations are more complex (weighted 2)
         if isinstance(node, (exp.Union, exp.Intersect, exp.Except)):
             score += 2
-        
-        # Window functions add complexity (weighted 1)
         if isinstance(node, (exp.Window, exp.WindowSpec)):
             score += 1
         
         # LATERAL adds complexity (weighted 1)
         if isinstance(node, exp.Lateral):
             score += 1
-        
-        # QUALIFY adds complexity (weighted 1)
         if isinstance(node, exp.Qualify):
             score += 1
         
@@ -306,18 +258,7 @@ def calculate_complexity(ast: Any) -> int:
 
 
 def count_query_elements(ast: Any) -> dict:
-    """
-    Count various elements in the query.
-    
-    Args:
-        ast: sqlglot Expression AST node
-    
-    Returns:
-        Dictionary with counts: joins, subqueries, ctes, aggregations,
-        case_statements, unions, windows, laterals, qualify, tablesample,
-        locking, distinct_on, values, filter_agg, insert, update, delete,
-        merge, returning.
-    """
+    """Return counts of joins, subqueries, ctes, aggregations, etc."""
     if ast is None:
         return {
             'joins': 0,
@@ -431,9 +372,6 @@ def generate_pattern_signature(ast: Any) -> str:
     
     if not clauses:
         return "UNKNOWN"
-    
-    # Create a normalized signature from clause order
-    # Main clauses in typical SQL order (SELECT-related, then DML)
     clause_order = [
         "WITH", "CTE", "SELECT", "DISTINCT", "DISTINCT_ON",
         "FROM", "LATERAL", "JOIN", "JOIN_INNER", "JOIN_LEFT", "JOIN_RIGHT", "JOIN_FULL", "JOIN_CROSS",
@@ -450,8 +388,6 @@ def generate_pattern_signature(ast: Any) -> str:
     for clause in clause_order:
         if clause in clauses:
             signature_parts.append(clause)
-    
-    # Add any remaining clauses not in the standard order
     for clause in sorted(clauses):
         if clause not in clause_order:
             signature_parts.append(clause)
@@ -466,20 +402,8 @@ def generate_pattern_signature(ast: Any) -> str:
     return signature
 
 
-# =============================================================================
-# Combined Analysis
-# =============================================================================
-
 def analyze_query(ast: Any) -> QueryMetadata:
-    """
-    Perform complete query analysis and return QueryMetadata.
-    
-    Args:
-        ast: sqlglot Expression AST node
-    
-    Returns:
-        QueryMetadata object with all analysis results
-    """
+    """Return QueryMetadata (complexity, signature, clauses, counts)."""
     if ast is None:
         return QueryMetadata(
             complexity_score=0,

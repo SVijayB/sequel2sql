@@ -1,117 +1,54 @@
 # -*- coding: utf-8 -*-
-"""
-PostgreSQL Error Code Mapping and Taxonomy
-
-Maps PostgreSQL SQLSTATE error codes to taxonomy categories and provides
-error code extraction from pglast ParseError exceptions.
-"""
+"""PostgreSQL SQLSTATE to taxonomy mapping and error code extraction."""
 
 import re
 from typing import Optional, Dict, List
 
 
-# =============================================================================
-# PostgreSQL Error Code to Taxonomy Category Mapping
-# =============================================================================
-
-# SQLSTATE class codes:
-# 42xxx - Syntax errors or access rule violations
-# 22xxx - Data exceptions
-# 23xxx - Integrity constraint violations
-# 28xxx - Invalid authorization specification
-# 2Bxxx - Dependent privilege descriptors still exist
-# 2Dxxx - Invalid transaction termination
-# 2Fxxx - SQL routine exception
-# 34xxx - Invalid cursor name
-# 38xxx - External routine exception
-# 39xxx - External routine invocation exception
-# 3Bxxx - Savepoint exception
-# 3Dxxx - Invalid catalog name
-# 3Fxxx - Invalid schema name
-# 40xxx - Transaction rollback
-# 42xxx - Syntax error or access rule violation
-# 44xxx - WITH CHECK OPTION violation
-# 53xxx - Insufficient resources
-# 54xxx - Program limit exceeded
-# 55xxx - Object not in prerequisite state
-# 57xxx - Operator intervention
-# 58xxx - System error
-# 72xxx - Snapshot too old
-# F0xxx - Configuration file error
-# HVxxx - Foreign data wrapper error
-# P0xxx - PL/pgSQL error
-# XXxxx - Internal error
-
 POSTGRES_ERROR_CODE_MAP: Dict[str, str] = {
-    # Syntax errors (42601)
-    "42601": "syntax",  # syntax_error
-    "42602": "syntax",  # invalid_name
-    "42611": "syntax",  # invalid_column_definition
-    "42622": "syntax",  # name_too_long
-    
-    # Semantic errors - Column/Table resolution (42xxx, 427xx)
-    "42702": "semantic",  # ambiguous_column
-    "42703": "semantic",  # undefined_column
-    "42704": "semantic",  # undefined_object
-    "42710": "semantic",  # duplicate_object
-    "42712": "semantic",  # duplicate_table
-    "42723": "semantic",  # duplicate_function
-    "42725": "semantic",  # ambiguous_function
-    
-    # Table errors (42P01, 42P02, etc.)
-    "42P01": "semantic",  # undefined_table
-    "42P02": "semantic",  # undefined_parameter
-    "42P03": "semantic",  # duplicate_cursor
-    "42P04": "semantic",  # duplicate_database
-    "42P05": "semantic",  # duplicate_prepared_statement
-    "42P06": "semantic",  # duplicate_schema
-    "42P07": "semantic",  # duplicate_table
-    
-    # Logical errors - Grouping/Aggregation (42803, 42804, etc.)
-    "42803": "logical",  # grouping_error (column must appear in GROUP BY)
-    "42804": "semantic",  # datatype_mismatch
-    "42809": "logical",  # wrong_object_type
-    "42830": "logical",  # invalid_foreign_key
-    "42846": "semantic",  # cannot_coerce
-    "42883": "semantic",  # undefined_function
-    "42884": "semantic",  # no_function_matches
-    
-    # Windowing errors (42P20)
-    "42P20": "logical",  # windowing_error
-    
-    # Data type errors (22xxx)
-    "22005": "semantic",  # error_in_assignment
-    "22007": "semantic",  # invalid_datetime_format
-    "22008": "semantic",  # datetime_field_overflow
-    "22012": "semantic",  # division_by_zero
-    "22023": "semantic",  # invalid_parameter_value
-    "22P02": "semantic",  # invalid_text_representation
-    "22P03": "semantic",  # invalid_binary_representation
-    "22P04": "semantic",  # bad_copy_file_format
-    "22P05": "semantic",  # untranslatable_character
-    
-    # Integrity constraint violations (23xxx)
-    "23000": "logical",  # integrity_constraint_violation
-    "23001": "logical",  # restrict_violation
-    "23502": "logical",  # not_null_violation
-    "23503": "logical",  # foreign_key_violation
-    "23505": "logical",  # unique_violation
-    "23514": "logical",  # check_violation
-    
-    # Join-related errors (inferred from context)
-    # These don't have specific SQLSTATE codes, but we can infer from error messages
-    # "JOIN_ERROR": "join_related",
-    # "MISSING_JOIN": "join_related",
-    
-    # Aggregation errors (inferred)
-    # "AGGREGATION_ERROR": "aggregation",
-    # "MISSING_GROUPBY": "aggregation",
+    "42601": "syntax",
+    "42602": "syntax",
+    "42611": "syntax",
+    "42622": "syntax",
+    "42702": "semantic",
+    "42703": "semantic",
+    "42704": "semantic",
+    "42710": "semantic",
+    "42712": "semantic",
+    "42723": "semantic",
+    "42725": "semantic",
+    "42P01": "semantic",
+    "42P02": "semantic",
+    "42P03": "semantic",
+    "42P04": "semantic",
+    "42P05": "semantic",
+    "42P06": "semantic",
+    "42P07": "semantic",
+    "42803": "logical",
+    "42804": "semantic",
+    "42809": "logical",
+    "42830": "logical",
+    "42846": "semantic",
+    "42883": "semantic",
+    "42884": "semantic",
+    "42P20": "logical",
+    "22005": "semantic",
+    "22007": "semantic",
+    "22008": "semantic",
+    "22012": "semantic",
+    "22023": "semantic",
+    "22P02": "semantic",
+    "22P03": "semantic",
+    "22P04": "semantic",
+    "22P05": "semantic",
+    "23000": "logical",
+    "23001": "logical",
+    "23502": "logical",
+    "23503": "logical",
+    "23505": "logical",
+    "23514": "logical",
 }
 
-
-# =============================================================================
-# Taxonomy Categories and Their Tags
-# =============================================================================
 
 TAXONOMY_CATEGORIES: Dict[str, List[str]] = {
     "syntax": [
@@ -187,37 +124,17 @@ TAXONOMY_CATEGORIES: Dict[str, List[str]] = {
 }
 
 
-# =============================================================================
-# Error Code Extraction from pglast ParseError
-# =============================================================================
-
 def extract_error_code(error_message: str) -> Optional[str]:
-    """
-    Extract PostgreSQL SQLSTATE error code from error message.
-    
-    pglast ParseError messages may contain SQLSTATE codes in various formats:
-    - Direct SQLSTATE: "ERROR: 42703: column 'x' does not exist"
-    - Pattern-based: Need to match error patterns to codes
-    
-    Args:
-        error_message: The error message string from pglast ParseError
-    
-    Returns:
-        SQLSTATE error code (e.g., "42703", "42P01") or None if not found
-    """
-    # Pattern 1: Direct SQLSTATE code in error message
-    # Format: "ERROR: 42703: ..." or "SQLSTATE 42703" or "[42703]"
-    sqlstate_pattern = r'(?:SQLSTATE|ERROR)[\s:]*([0-9A-Z]{5})|\[([0-9A-Z]{5})\]'
+    """Extract SQLSTATE from message (direct code or pattern match). Returns None if not found."""
+    sqlstate_pattern = r'(?:SQLSTATE|ERROR)[\s:]*([0-9][0-9A-Z]{4})|\[([0-9][0-9A-Z]{4})\]'
     match = re.search(sqlstate_pattern, error_message, re.IGNORECASE)
     if match:
-        return match.group(1) or match.group(2)
-    
-    # Pattern 2: Match error message patterns to known error codes
-    # This is a fallback when SQLSTATE is not directly available
+        return (match.group(1) or match.group(2)).upper()
     error_patterns = {
         r"syntax error": "42601",
         r"unterminated quoted string": "42601",
         r"column reference .* is ambiguous": "42702",
+        r"column reference is ambiguous": "42702",
         r"column .* does not exist": "42703",
         r"undefined column": "42703",
         r"table .* does not exist": "42P01",
@@ -237,7 +154,7 @@ def extract_error_code(error_message: str) -> Optional[str]:
     
     error_lower = error_message.lower()
     for pattern, code in error_patterns.items():
-        if re.search(pattern, error_lower):
+        if re.search(pattern, error_lower, re.IGNORECASE):
             return code
     
     return None
@@ -260,35 +177,70 @@ def get_taxonomy_category(error_code: Optional[str]) -> Optional[str]:
 
 
 def get_tags_for_category(category: Optional[str]) -> List[str]:
-    """
-    Get all error tags associated with a taxonomy category.
-    
-    Args:
-        category: Taxonomy category name (e.g., "syntax", "semantic")
-    
-    Returns:
-        List of error tags for that category
-    """
+    """Return tags for a taxonomy category. Empty list if unknown."""
     if category is None:
         return []
     
     return TAXONOMY_CATEGORIES.get(category, [])
 
 
-# =============================================================================
-# Reverse Mapping: Tag to Category
-# =============================================================================
+# Class fallback when exact SQLSTATE unknown (first two chars).
+SQLSTATE_CLASS_FALLBACK: Dict[str, str] = {
+    "42": "semantic", "22": "semantic", "23": "logical", "28": "semantic",
+    "2B": "semantic", "2D": "logical", "2F": "semantic", "34": "semantic",
+    "38": "semantic", "39": "semantic", "3B": "logical", "3D": "semantic",
+    "3F": "semantic", "40": "logical", "44": "logical", "53": "semantic",
+    "54": "semantic", "55": "semantic", "57": "semantic", "58": "semantic",
+    "72": "semantic", "0A": "semantic", "XX": "semantic", "F0": "semantic",
+    "HV": "semantic", "P0": "semantic",
+}
+
+
+def get_taxonomy_category_with_fallback(error_code: Optional[str]) -> Optional[str]:
+    """
+    Map PostgreSQL error code to taxonomy category.
+    Prefer specific SQLSTATE mapping, then class-level fallback (42xxx, 22xxx, etc.).
+    """
+    if error_code is None:
+        return None
+    specific = POSTGRES_ERROR_CODE_MAP.get(error_code)
+    if specific is not None:
+        return specific
+    if len(error_code) >= 2:
+        return SQLSTATE_CLASS_FALLBACK.get(error_code[:2])
+    return None
+
+
+POSTGRES_SQLSTATE_TO_TAG: Dict[str, str] = {
+    "42601": "syntax_error",
+    "42602": "syntax_invalid_name",
+    "42702": "schema_ambiguous_col",
+    "42703": "schema_hallucination_col",
+    "42704": "schema_unknown_error",
+    "42P01": "schema_hallucination_table",
+    "42803": "logical_grouping_error",
+    "42P20": "logical_windowing_error",
+    "23502": "logical_integrity_violation",
+    "23503": "logical_foreign_key_violation",
+    "23505": "logical_unique_violation",
+    "23514": "logical_check_violation",
+    "42883": "schema_undefined_function",
+    "42884": "schema_undefined_function",
+    "42804": "schema_type_mismatch",
+    "22P02": "value_format_mismatch",
+    "22012": "value_format_mismatch",
+}
+
+
+def get_tag_for_sqlstate(sqlstate: Optional[str]) -> Optional[str]:
+    """Return single best tag for a SQLSTATE, or None."""
+    if sqlstate is None:
+        return None
+    return POSTGRES_SQLSTATE_TO_TAG.get(sqlstate)
+
 
 def get_category_for_tag(tag: str) -> Optional[str]:
-    """
-    Find which taxonomy category a specific error tag belongs to.
-    
-    Args:
-        tag: Error tag (e.g., "syntax_trailing_delimiter", "schema_hallucination_col")
-    
-    Returns:
-        Taxonomy category name or None if not found
-    """
+    """Return taxonomy category for a tag, or None."""
     for category, tags in TAXONOMY_CATEGORIES.items():
         if tag in tags or tag.startswith(category + "_"):
             return category
@@ -298,21 +250,20 @@ def get_category_for_tag(tag: str) -> Optional[str]:
         return "syntax"
     elif tag.startswith("schema_"):
         return "semantic"  # schema errors are semantic
-    elif tag.startswith("logical_"):
+    if tag.startswith("logical_"):
         return "logical"
-    elif tag.startswith("join_"):
+    if tag.startswith("join_"):
         return "join_related"
-    elif tag.startswith("aggregation_"):
+    if tag.startswith("aggregation_"):
         return "aggregation"
-    elif tag.startswith("filter_"):
+    if tag.startswith("filter_"):
         return "filter_conditions"
-    elif tag.startswith("value_"):
+    if tag.startswith("value_"):
         return "value_representation"
-    elif tag.startswith("subquery_"):
+    if tag.startswith("subquery_"):
         return "subquery_formulation"
-    elif tag.startswith("set_"):
+    if tag.startswith("set_"):
         return "set_operations"
-    elif tag.startswith("structural_"):
+    if tag.startswith("structural_"):
         return "structural"
-    
     return None

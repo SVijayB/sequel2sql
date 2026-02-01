@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-SQL Query Validator
-
-Provides reusable methods for SQL query validation:
-- Part 1: Static Analysis (syntax validation using sqlglot parser)
-- Part 2: Semantic Validation (schema-aware validation using sqlglot optimizer)
-"""
+"""SQL validation: syntax (sqlglot) and optional schema-aware semantic checks."""
 
 from typing import Optional, Dict, Any
 
@@ -23,6 +17,7 @@ from ast_parsers.errors import (
 from ast_parsers.error_codes import (
     extract_error_code,
     get_taxonomy_category,
+    get_taxonomy_category_with_fallback,
     get_category_for_tag,
 )
 from ast_parsers.query_analyzer import (
@@ -79,7 +74,6 @@ def validate_syntax(
     except ParseError as e:
         errors = _classify_syntax_error(sql, e)
         result = ValidationResult(valid=False, errors=errors, sql=sql)
-        # Try to parse for query metadata even if there are errors
         try:
             ast = sqlglot.parse_one(sql, read=dialect)
             result.ast = ast
@@ -94,11 +88,10 @@ def validate_syntax(
         errors = []
         error_message = str(e)
         
-        # Extract error code
+        # Extract error code; use class fallback when specific code unknown
         error_code = extract_error_code(error_message)
-        taxonomy_category = get_taxonomy_category(error_code)
+        taxonomy_category = get_taxonomy_category_with_fallback(error_code) or get_taxonomy_category(error_code)
         
-        # Check for unterminated strings
         if "unterminated" in error_message.lower() or _has_unterminated_string(sql):
             errors.append(ValidationError(
                 tag=SyntaxErrorTags.UNTERMINATED_STRING,
@@ -136,8 +129,6 @@ def _detect_silent_fixes(sql: str) -> list:
             location=trailing_pos,
             context=sql[max(0, trailing_pos-10):trailing_pos+15],
         ))
-    
-    # Check for SELECT without columns (SELECT FROM ...)
     if _has_empty_select(sql):
         errors.append(ValidationError(
             tag=SyntaxErrorTags.KEYWORD_MISUSE,
@@ -164,19 +155,9 @@ def _classify_syntax_error(sql: str, error: ParseError) -> list:
     """
     error_message = str(error)
     errors = []
-    
-    # Try to extract location from error
-    location = None
-    if hasattr(error, 'col'):
-        location = error.col
-    
-    # Extract PostgreSQL error code from error message
+    location = getattr(error, "col", None)
     error_code = extract_error_code(error_message)
     taxonomy_category = get_taxonomy_category(error_code)
-    
-    # --- Classification Logic ---
-    
-    # 1. Check for unbalanced tokens (parentheses/brackets)
     if _has_unbalanced_tokens(sql):
         errors.append(ValidationError(
             tag=SyntaxErrorTags.UNBALANCED_TOKENS,
@@ -198,8 +179,6 @@ def _classify_syntax_error(sql: str, error: ParseError) -> list:
             error_code=error_code,
             taxonomy_category=taxonomy_category or "syntax",
         ))
-    
-    # 3. Check for unterminated strings
     if "unterminated" in error_message.lower() or _has_unterminated_string(sql):
         errors.append(ValidationError(
             tag=SyntaxErrorTags.UNTERMINATED_STRING,
@@ -223,9 +202,6 @@ def _classify_syntax_error(sql: str, error: ParseError) -> list:
 
 
 def _has_unbalanced_tokens(sql: str) -> bool:
-    """Check if SQL has unbalanced parentheses or brackets."""
-    # Simple counting approach - doesn't handle strings perfectly
-    # but good enough for error classification
     parens = sql.count('(') - sql.count(')')
     brackets = sql.count('[') - sql.count(']')
     return parens != 0 or brackets != 0
@@ -251,36 +227,18 @@ def _get_unbalanced_context(sql: str) -> str:
 
 
 def _find_trailing_delimiter(sql: str, error_message: str) -> Optional[int]:
-    """
-    Find position of trailing delimiter if present.
-    
-    Common pattern: "SELECT a, b, FROM table" -> comma before FROM
-    A trailing delimiter is a comma followed only by whitespace and then a keyword,
-    with no column/expression between the comma and keyword.
-    """
+    """Return position of trailing comma before keyword (e.g. SELECT a, FROM t)."""
     import re
-    
-    # Keywords that commonly follow erroneous trailing commas
     keywords = ['FROM', 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'LIMIT', 'UNION', 'JOIN']
-    
     sql_upper = sql.upper()
     for keyword in keywords:
-        # Pattern: comma, optional whitespace, then keyword (no identifier in between)
-        # This matches: "SELECT a, b, FROM" but NOT "SELECT a, b FROM" or "SELECT a.b, c FROM"
         pattern = rf',\s+{re.escape(keyword)}\b'
         match = re.search(pattern, sql_upper)
         if match:
             comma_pos = match.start()
-            # Check what comes before the comma - if it's a valid identifier/expression,
-            # then the comma is valid (part of column list). If it's just whitespace or
-            # another comma, it's trailing.
             before_comma = sql[:comma_pos].rstrip()
-            # A trailing comma means the comma is after a column name but before a keyword
-            # with nothing in between. Check if there's a word character right before comma.
             if before_comma and before_comma[-1].isalnum():
-                # This is likely a trailing comma: "column, FROM"
                 return comma_pos
-    
     return None
 
 
@@ -291,42 +249,12 @@ def _has_unterminated_string(sql: str) -> bool:
     return single_quotes % 2 != 0 or double_quotes % 2 != 0
 
 
-# =============================================================================
-# Part 2: Semantic Validation (Schema-aware)
-# =============================================================================
-
 def validate_schema(
     sql: str,
     schema: Dict[str, Dict[str, str]],
     dialect: str = "postgres",
 ) -> ValidationResult:
-    """
-    Validate SQL query against a schema for semantic correctness.
-    
-    This performs schema-aware validation to detect:
-    - Non-existent tables
-    - Non-existent columns
-    - Ambiguous column references
-    - Type mismatches
-    
-    Args:
-        sql: The SQL query string to validate
-        schema: Schema definition as dict of {table_name: {column_name: type}}
-        dialect: SQL dialect (default: "postgres")
-    
-    Returns:
-        ValidationResult with valid=True if schema validation passes,
-        or valid=False with error details and tags
-    
-    Example:
-        >>> schema = {"users": {"id": "int", "name": "text"}}
-        >>> result = validate_schema("SELECT address FROM users", schema)
-        >>> result.valid
-        False
-        >>> result.tags
-        ['schema_hallucination_col']
-    """
-    # First, run static analysis (Part 1) to ensure SQL is syntactically valid
+    """Validate SQL against schema (tables/columns); requires valid syntax first."""
     syntax_result = validate_syntax(sql, dialect=dialect)
     if not syntax_result.valid:
         # Return syntax errors immediately - can't validate schema on invalid SQL
@@ -343,8 +271,6 @@ def validate_schema(
         return ValidationResult(valid=False, errors=[error], sql=sql)
     
     errors = []
-    
-    # --- Check 1: Table Existence ---
     missing_tables = _check_tables_exist(parsed, schema)
     for table_name in missing_tables:
         error_code = extract_error_code(f"table {table_name} does not exist")
@@ -363,10 +289,7 @@ def validate_schema(
         result = ValidationResult(valid=False, errors=errors, ast=parsed, sql=sql)
         result.query_metadata = analyze_query(parsed)
         return result
-    
-    # --- Check 2: Column Existence & Ambiguity ---
     try:
-        # Use sqlglot optimizer with column validation
         optimize(
             parsed,
             schema=schema,
@@ -398,15 +321,11 @@ def validate_schema(
 
 
 def _check_tables_exist(parsed: exp.Expression, schema: Dict) -> list:
-    """Check if all referenced tables exist in the schema."""
     missing = []
     schema_lower = {k.lower(): v for k, v in schema.items()}
-    
     for table in parsed.find_all(exp.Table):
-        table_name = table.name
-        # Check case-insensitive
-        if table_name.lower() not in schema_lower:
-            missing.append(table_name)
+        if table.name.lower() not in schema_lower:
+            missing.append(table.name)
     
     return missing
 
@@ -421,29 +340,19 @@ def _classify_schema_error(error_message: str, ast: Optional[Any] = None) -> lis
     """
     errors = []
     msg_lower = error_message.lower()
-    
-    # Extract error code
     error_code = extract_error_code(error_message)
     taxonomy_category = get_taxonomy_category(error_code)
-    
-    # Determine affected clauses if AST is available
     affected_clauses = []
     if ast is not None:
-        # Try to find the problematic node - this is a heuristic
-        # In practice, we'd need more context about which node failed
-        # For now, we'll extract all clauses from the query
         try:
             from ast_parsers.query_analyzer import extract_sql_clauses
             all_clauses = extract_sql_clauses(ast)
-            # For schema errors, they often affect WHERE, JOIN, or SELECT clauses
             if any(c in all_clauses for c in ["WHERE", "JOIN"]):
                 affected_clauses = [c for c in ["WHERE", "JOIN"] if c in all_clauses]
             elif "SELECT" in all_clauses:
                 affected_clauses = ["SELECT"]
-        except:
+        except Exception:
             pass
-    
-    # Check for column resolution errors (sqlglot uses "could not be resolved")
     if ("column" in msg_lower and "could not be resolved" in msg_lower) or \
        "unknown column" in msg_lower or \
        ("column" in msg_lower and "not found" in msg_lower):
@@ -529,15 +438,11 @@ def validate_query(
     # Part 2: Semantic Validation (only if schema provided)
     if schema is not None:
         schema_result = validate_schema(sql, schema, dialect=dialect)
-        # Preserve the AST from syntax validation if schema validation failed to parse
         if schema_result.ast is None:
             schema_result.ast = syntax_result.ast
-        # Ensure query metadata is populated
         if schema_result.query_metadata is None and schema_result.ast is not None:
             schema_result.query_metadata = analyze_query(schema_result.ast)
         return schema_result
-    
-    # Ensure query metadata is populated for syntax-only validation
     if syntax_result.query_metadata is None and syntax_result.ast is not None:
         syntax_result.query_metadata = analyze_query(syntax_result.ast)
     

@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Tests for SQL Query Validator
-
-Test cases adapted from sequel2sql_capstone.py experimentation.
-"""
+"""Tests for SQL validator and error context pipeline."""
 
 import pytest
 from ast_parsers import (
@@ -43,12 +39,7 @@ TEST_SCHEMA = {
 }
 
 
-# =============================================================================
-# Part 1: Syntax Validation Tests
-# =============================================================================
-
 class TestSyntaxValidation:
-    """Tests for validate_syntax() - Part 1: Static Analysis."""
     
     def test_valid_simple_query(self):
         """Valid SQL should pass syntax validation."""
@@ -193,12 +184,7 @@ class TestSchemaValidation:
         assert result.valid is True
 
 
-# =============================================================================
-# Combined Validator Tests
-# =============================================================================
-
 class TestValidateQuery:
-    """Tests for validate_query() - Combined validation."""
     
     def test_syntax_only_valid(self):
         """Valid syntax without schema should pass."""
@@ -254,10 +240,6 @@ class TestValidateQuery:
         
         assert result.valid is True
 
-
-# =============================================================================
-# Edge Cases and Error Classification Tests
-# =============================================================================
 
 class TestEdgeCases:
     """Tests for edge cases and error classification."""
@@ -365,12 +347,7 @@ class TestErrorCodes:
         assert get_category_for_tag("aggregation_missing_groupby") == "aggregation"
 
 
-# =============================================================================
-# Query Analysis Tests
-# =============================================================================
-
 class TestQueryAnalysis:
-    """Tests for query analysis (clauses, complexity, signatures)."""
     
     def test_extract_sql_clauses_simple(self):
         """Should extract clauses from simple query."""
@@ -563,12 +540,7 @@ class TestEnhancedErrorFields:
         assert d["affected_clauses"] == ["SELECT", "FROM"]
 
 
-# =============================================================================
-# Query Metadata Tests
-# =============================================================================
-
 class TestQueryMetadata:
-    """Tests for query metadata in validation results."""
     
     def test_valid_query_has_metadata(self):
         """Valid queries should have query metadata."""
@@ -634,8 +606,79 @@ class TestQueryMetadata:
 
 
 # =============================================================================
-# Run tests directly
+# ErrorContext pipeline tests (build_error_context, extract_diagnostics)
 # =============================================================================
+
+class TestErrorContextPipeline:
+    """Tests for build_error_context and extract_diagnostics."""
+
+    def test_build_error_context_sql_only(self):
+        """build_error_context with only sql (no error) returns empty diagnostics and tags."""
+        from ast_parsers import build_error_context
+
+        ctx = build_error_context("SELECT 1")
+        assert ctx.sql == "SELECT 1"
+        assert ctx.sqlstate is None
+        assert ctx.diagnostics is None
+        assert ctx.tags == []
+
+    def test_build_error_context_with_message_like_error(self):
+        """build_error_context with a string-like error extracts code via regex (low confidence)."""
+        from ast_parsers import build_error_context
+
+        class FakeError:
+            def __str__(self):
+                return "ERROR: column 'x' does not exist"
+
+        ctx = build_error_context("SELECT x FROM t", error=FakeError())
+        assert ctx.sql == "SELECT x FROM t"
+        # May get 42703 from regex; tags should have source and confidence
+        assert all(hasattr(t, "tag") and hasattr(t, "source") and hasattr(t, "confidence") for t in ctx.tags)
+        if ctx.tags:
+            assert all(0 <= t.confidence <= 1 for t in ctx.tags)
+
+    def test_build_error_context_to_dict(self):
+        """ErrorContext.to_dict() includes sql, sqlstate, diagnostics, tags."""
+        from ast_parsers import build_error_context, ErrorContext, Diagnostics
+
+        ctx = build_error_context("SELECT 1", error=None)
+        d = ctx.to_dict()
+        assert "sql" in d
+        assert "sqlstate" in d
+        assert "diagnostics" in d
+        assert "tags" in d
+        assert d["sql"] == "SELECT 1"
+
+    def test_extract_diagnostics_none(self):
+        """extract_diagnostics(None) returns Diagnostics with None for pg_diag fields."""
+        from ast_parsers import extract_diagnostics
+
+        diag = extract_diagnostics(None)
+        assert diag.column_name is None
+        assert diag.table_name is None
+        assert diag.position is None
+        assert diag.constraint_name is None
+
+    def test_localize_position(self):
+        """localize_position returns token and snippet around position."""
+        from ast_parsers import localize_position
+
+        loc = localize_position("SELECT foo FROM bar", 7)
+        assert loc is not None
+        assert "token" in loc
+        assert "context_snippet" in loc
+        assert loc["token"] == "foo"
+
+    def test_tag_with_provenance_to_dict(self):
+        """TagWithProvenance.to_dict() has tag, source, confidence."""
+        from ast_parsers import TagWithProvenance
+
+        t = TagWithProvenance(tag="schema_hallucination_col", source="pg_diag.column_name", confidence=0.95)
+        d = t.to_dict()
+        assert d["tag"] == "schema_hallucination_col"
+        assert d["source"] == "pg_diag.column_name"
+        assert d["confidence"] == 0.95
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

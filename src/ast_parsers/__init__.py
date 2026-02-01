@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Sequel2SQL Query Validator
-
-A reusable SQL query validation module with static analysis
-and schema-aware semantic validation using sqlglot.
-"""
+"""SQL validation (syntax + optional schema) and ErrorContext from PostgreSQL err.diag.*."""
 
 from ast_parsers.errors import (
     ValidationResult,
@@ -19,6 +14,12 @@ from ast_parsers.errors import (
     SubqueryErrorTags,
     SetOperationErrorTags,
     StructuralErrorTags,
+    Diagnostics,
+    ErrorContext,
+    TagWithProvenance,
+    CONFIDENCE_HIGH,
+    CONFIDENCE_MEDIUM,
+    CONFIDENCE_LOW,
 )
 from ast_parsers.validator import (
     validate_syntax,
@@ -28,8 +29,10 @@ from ast_parsers.validator import (
 from ast_parsers.error_codes import (
     extract_error_code,
     get_taxonomy_category,
+    get_taxonomy_category_with_fallback,
     get_tags_for_category,
     get_category_for_tag,
+    get_tag_for_sqlstate,
     POSTGRES_ERROR_CODE_MAP,
     TAXONOMY_CATEGORIES,
 )
@@ -40,6 +43,11 @@ from ast_parsers.query_analyzer import (
     analyze_query,
     get_clause_for_node,
     count_query_elements,
+)
+from ast_parsers.error_context import (
+    build_error_context,
+    extract_diagnostics,
+    localize_position,
 )
 
 __version__ = "0.1.0"
@@ -52,6 +60,16 @@ __all__ = [
     "validate_syntax",
     "validate_schema",
     "validate_query",
+    # Error context pipeline
+    "ErrorContext",
+    "Diagnostics",
+    "TagWithProvenance",
+    "build_error_context",
+    "extract_diagnostics",
+    "localize_position",
+    "CONFIDENCE_HIGH",
+    "CONFIDENCE_MEDIUM",
+    "CONFIDENCE_LOW",
     # Error tags
     "SyntaxErrorTags",
     "SchemaErrorTags",
@@ -65,8 +83,10 @@ __all__ = [
     # Error codes
     "extract_error_code",
     "get_taxonomy_category",
+    "get_taxonomy_category_with_fallback",
     "get_tags_for_category",
     "get_category_for_tag",
+    "get_tag_for_sqlstate",
     "POSTGRES_ERROR_CODE_MAP",
     "TAXONOMY_CATEGORIES",
     # Query analysis
