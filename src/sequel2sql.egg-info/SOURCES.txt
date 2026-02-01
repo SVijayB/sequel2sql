@@ -1,0 +1,11 @@
+LICENSE
+README.md
+pyproject.toml
+src/load_spider2_dataset.py
+src/load_spider_dataset.py
+src/run_query.py
+src/sequel2sql.egg-info/PKG-INFO
+src/sequel2sql.egg-info/SOURCES.txt
+src/sequel2sql.egg-info/dependency_links.txt
+src/sequel2sql.egg-info/requires.txt
+src/sequel2sql.egg-info/top_level.txt

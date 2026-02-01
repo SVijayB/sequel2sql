@@ -1,0 +1,3 @@
+load_spider2_dataset
+load_spider_dataset
+run_query
