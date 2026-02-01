@@ -97,9 +97,59 @@ def extract_sql_clauses(ast: Any) -> List[str]:
             if node.args.get("distinct"):
                 clauses.add("DISTINCT")
         
+        # DISTINCT ON (Postgres; sqlglot uses exp.Distinct with "on" expression)
+        if isinstance(node, exp.Distinct) and node.args.get("on"):
+            clauses.add("DISTINCT_ON")
+        
+        # WINDOW / OVER (window functions)
+        if isinstance(node, (exp.Window, exp.WindowSpec)):
+            clauses.add("WINDOW")
+        
+        # PARTITION BY (inside window spec)
+        if isinstance(node, exp.Partition):
+            clauses.add("PARTITION")
+        
+        # FILTER (Postgres aggregate filter: agg() FILTER (WHERE ...))
+        if isinstance(node, exp.Filter):
+            clauses.add("FILTER")
+        
+        # LATERAL (lateral subqueries / LATERAL JOIN)
+        if isinstance(node, exp.Lateral):
+            clauses.add("LATERAL")
+        
+        # VALUES (values list / table value constructor)
+        if isinstance(node, exp.Values):
+            clauses.add("VALUES")
+        
+        # QUALIFY (filter on window results; sqlglot parses even if not PG-native)
+        if isinstance(node, exp.Qualify):
+            clauses.add("QUALIFY")
+        
+        # TABLESAMPLE
+        if isinstance(node, exp.TableSample):
+            clauses.add("TABLESAMPLE")
+        
+        # LOCKING (FOR UPDATE, SKIP LOCKED, etc.; sqlglot uses exp.Lock)
+        if isinstance(node, exp.Lock):
+            clauses.add("LOCKING")
+        
         # Subquery
         if isinstance(node, exp.Subquery):
             clauses.add("SUBQUERY")
+        
+        # DML: INSERT, UPDATE, DELETE, MERGE
+        if isinstance(node, exp.Insert):
+            clauses.add("INSERT")
+        if isinstance(node, exp.Update):
+            clauses.add("UPDATE")
+        if isinstance(node, exp.Delete):
+            clauses.add("DELETE")
+        if isinstance(node, exp.Merge):
+            clauses.add("MERGE")
+        
+        # RETURNING (Postgres DML returning clause)
+        if isinstance(node, exp.Returning):
+            clauses.add("RETURNING")
     
     # Sort for consistent output
     return sorted(list(clauses))
@@ -149,6 +199,34 @@ def get_clause_for_node(node: Any) -> List[str]:
             clauses.add("WITH")
         elif isinstance(current, exp.Subquery):
             clauses.add("SUBQUERY")
+        elif isinstance(current, exp.Distinct) and getattr(current, "args", {}).get("on"):
+            clauses.add("DISTINCT_ON")
+        elif isinstance(current, (exp.Window, exp.WindowSpec)):
+            clauses.add("WINDOW")
+        elif isinstance(current, exp.Partition):
+            clauses.add("PARTITION")
+        elif isinstance(current, exp.Filter):
+            clauses.add("FILTER")
+        elif isinstance(current, exp.Lateral):
+            clauses.add("LATERAL")
+        elif isinstance(current, exp.Values):
+            clauses.add("VALUES")
+        elif isinstance(current, exp.Qualify):
+            clauses.add("QUALIFY")
+        elif isinstance(current, exp.TableSample):
+            clauses.add("TABLESAMPLE")
+        elif isinstance(current, exp.Lock):
+            clauses.add("LOCKING")
+        elif isinstance(current, exp.Insert):
+            clauses.add("INSERT")
+        elif isinstance(current, exp.Update):
+            clauses.add("UPDATE")
+        elif isinstance(current, exp.Delete):
+            clauses.add("DELETE")
+        elif isinstance(current, exp.Merge):
+            clauses.add("MERGE")
+        elif isinstance(current, exp.Returning):
+            clauses.add("RETURNING")
         
         # Walk up to parent
         current = getattr(current, 'parent', None)
@@ -207,6 +285,22 @@ def calculate_complexity(ast: Any) -> int:
         # Set operations are more complex (weighted 2)
         if isinstance(node, (exp.Union, exp.Intersect, exp.Except)):
             score += 2
+        
+        # Window functions add complexity (weighted 1)
+        if isinstance(node, (exp.Window, exp.WindowSpec)):
+            score += 1
+        
+        # LATERAL adds complexity (weighted 1)
+        if isinstance(node, exp.Lateral):
+            score += 1
+        
+        # QUALIFY adds complexity (weighted 1)
+        if isinstance(node, exp.Qualify):
+            score += 1
+        
+        # MERGE is complex (weighted 2)
+        if isinstance(node, exp.Merge):
+            score += 2
     
     return score
 
@@ -219,14 +313,10 @@ def count_query_elements(ast: Any) -> dict:
         ast: sqlglot Expression AST node
     
     Returns:
-        Dictionary with counts: {
-            'joins': int,
-            'subqueries': int,
-            'ctes': int,
-            'aggregations': int,
-            'case_statements': int,
-            'unions': int,
-        }
+        Dictionary with counts: joins, subqueries, ctes, aggregations,
+        case_statements, unions, windows, laterals, qualify, tablesample,
+        locking, distinct_on, values, filter_agg, insert, update, delete,
+        merge, returning.
     """
     if ast is None:
         return {
@@ -236,6 +326,19 @@ def count_query_elements(ast: Any) -> dict:
             'aggregations': 0,
             'case_statements': 0,
             'unions': 0,
+            'windows': 0,
+            'laterals': 0,
+            'qualify': 0,
+            'tablesample': 0,
+            'locking': 0,
+            'distinct_on': 0,
+            'values': 0,
+            'filter_agg': 0,
+            'insert': 0,
+            'update': 0,
+            'delete': 0,
+            'merge': 0,
+            'returning': 0,
         }
     
     counts = {
@@ -245,6 +348,19 @@ def count_query_elements(ast: Any) -> dict:
         'aggregations': 0,
         'case_statements': 0,
         'unions': 0,
+        'windows': 0,
+        'laterals': 0,
+        'qualify': 0,
+        'tablesample': 0,
+        'locking': 0,
+        'distinct_on': 0,
+        'values': 0,
+        'filter_agg': 0,
+        'insert': 0,
+        'update': 0,
+        'delete': 0,
+        'merge': 0,
+        'returning': 0,
     }
     
     for node in ast.walk():
@@ -260,6 +376,32 @@ def count_query_elements(ast: Any) -> dict:
             counts['case_statements'] += 1
         elif isinstance(node, (exp.Union, exp.Intersect, exp.Except)):
             counts['unions'] += 1
+        elif isinstance(node, (exp.Window, exp.WindowSpec)):
+            counts['windows'] += 1
+        elif isinstance(node, exp.Lateral):
+            counts['laterals'] += 1
+        elif isinstance(node, exp.Qualify):
+            counts['qualify'] += 1
+        elif isinstance(node, exp.TableSample):
+            counts['tablesample'] += 1
+        elif isinstance(node, exp.Lock):
+            counts['locking'] += 1
+        elif isinstance(node, exp.Distinct) and node.args.get("on"):
+            counts['distinct_on'] += 1
+        elif isinstance(node, exp.Values):
+            counts['values'] += 1
+        elif isinstance(node, exp.Filter):
+            counts['filter_agg'] += 1
+        elif isinstance(node, exp.Insert):
+            counts['insert'] += 1
+        elif isinstance(node, exp.Update):
+            counts['update'] += 1
+        elif isinstance(node, exp.Delete):
+            counts['delete'] += 1
+        elif isinstance(node, exp.Merge):
+            counts['merge'] += 1
+        elif isinstance(node, exp.Returning):
+            counts['returning'] += 1
     
     return counts
 
@@ -291,12 +433,16 @@ def generate_pattern_signature(ast: Any) -> str:
         return "UNKNOWN"
     
     # Create a normalized signature from clause order
-    # Main clauses in typical SQL order
+    # Main clauses in typical SQL order (SELECT-related, then DML)
     clause_order = [
-        "WITH", "CTE", "SELECT", "DISTINCT", "FROM", "JOIN", "JOIN_INNER",
-        "JOIN_LEFT", "JOIN_RIGHT", "JOIN_FULL", "JOIN_CROSS",
-        "WHERE", "GROUP", "HAVING", "ORDER", "LIMIT", "OFFSET",
-        "UNION", "INTERSECT", "EXCEPT", "SUBQUERY"
+        "WITH", "CTE", "SELECT", "DISTINCT", "DISTINCT_ON",
+        "FROM", "LATERAL", "JOIN", "JOIN_INNER", "JOIN_LEFT", "JOIN_RIGHT", "JOIN_FULL", "JOIN_CROSS",
+        "TABLESAMPLE", "VALUES",
+        "WHERE", "GROUP", "PARTITION", "FILTER", "HAVING",
+        "WINDOW", "QUALIFY",
+        "ORDER", "LIMIT", "OFFSET", "LOCKING",
+        "UNION", "INTERSECT", "EXCEPT", "SUBQUERY",
+        "INSERT", "UPDATE", "DELETE", "MERGE", "RETURNING",
     ]
     
     # Build signature in logical order
