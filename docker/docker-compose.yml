@@ -4,7 +4,7 @@
 #   - Spider 1.0:   SQLite (file-based)
 #   - Spider 2.0:   PostgreSQL 14.12, SQLite
 #
-# Usage with dbdex: see docker/README.md
+# Usage: see docker/README.md
 
 services:
   postgres:
@@ -30,78 +30,59 @@ services:
       timeout: 5s
       retries: 5
 
-  mysql:
-    image: mysql:8.4.0
-    container_name: sequel2sql_mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123123}
-    volumes:
-      - mysql_data:/var/lib/mysql
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
-    profiles:
-      - mysql
+  # mysql:
+  #   image: mysql:8.4.0
+  #   container_name: sequel2sql_mysql
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123123}
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   ports:
+  #     - "${MYSQL_PORT:-3306}:3306"
+  #   profiles:
+  #     - mysql
 
-  mssql:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: sequel2sql_sqlserver
-    environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-Y.sa123123}"
-      MSSQL_PID: "Developer"
-    volumes:
-      - mssql_data:/var/opt/mssql
-    ports:
-      - "${MSSQL_PORT:-1433}:1433"
-    profiles:
-      - sqlserver
+  # mssql:
+  #   image: mcr.microsoft.com/mssql/server:2022-latest
+  #   container_name: sequel2sql_sqlserver
+  #   environment:
+  #     ACCEPT_EULA: "Y"
+  #     MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-Y.sa123123}"
+  #     MSSQL_PID: "Developer"
+  #   volumes:
+  #     - mssql_data:/var/opt/mssql
+  #   ports:
+  #     - "${MSSQL_PORT:-1433}:1433"
+  #   profiles:
+  #     - sqlserver
 
-  oracle:
-    image: 3036197201/oracle19:latest
-    container_name: sequel2sql_oracle19
-    environment:
-      ORACLE_SID: ORCLCDB
-      ORACLE_PDB: ORCLPDB1
-      ORACLE_PWD: "${ORACLE_PWD:-mypassword1}"
-    ports:
-      - "${ORACLE_PORT:-1521}:1521"
-    volumes:
-      - oracle_data:/opt/oracle/oradata
-    profiles:
-      - oracle
+  # oracle:
+  #   image: 3036197201/oracle19:latest
+  #   container_name: sequel2sql_oracle19
+  #   environment:
+  #     ORACLE_SID: ORCLCDB
+  #     ORACLE_PDB: ORCLPDB1
+  #     ORACLE_PWD: "${ORACLE_PWD:-mypassword1}"
+  #   ports:
+  #     - "${ORACLE_PORT:-1521}:1521"
+  #   volumes:
+  #     - oracle_data:/opt/oracle/oradata
+  #   profiles:
+  #     - oracle
 
   # SQLite is file-based; mount a shared volume for .sqlite files
-  sqlite-mount:
-    image: alpine:3.20
-    container_name: sequel2sql_sqlite_mount
-    command: ["sh", "-c", "tail -f /dev/null"]
-    volumes:
-      - sqlite_data:/data/sqlite
-    profiles:
-      - sqlite
-
-  # dbdex client: run dbdex against postgres/mysql (or host SQLite paths).
-  dbdex:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.dbdex
-    container_name: sequel2sql_dbdex
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-root}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123123}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-    volumes:
-      - ../src:/app/src
-    depends_on:
-      postgres:
-        condition: service_healthy
-    profiles:
-      - client
+  # sqlite-mount:
+  #   image: alpine:3.20
+  #   container_name: sequel2sql_sqlite_mount
+  #   command: ["sh", "-c", "tail -f /dev/null"]
+  #   volumes:
+  #     - sqlite_data:/data/sqlite
+  #   profiles:
+  #     - sqlite
 
 volumes:
   postgres_data:
-  mysql_data:
-  mssql_data:
-  oracle_data:
-  sqlite_data:
+  # mysql_data:
+  # mssql_data:
+  # oracle_data:
+  # sqlite_data:
