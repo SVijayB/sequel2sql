@@ -18,16 +18,10 @@ def extract_sql_clauses(ast: Any) -> List[str]:
     for node in ast.walk():
         if isinstance(node, exp.Select):
             clauses.add("SELECT")
-        
-        # FROM clause
         if isinstance(node, exp.From):
             clauses.add("FROM")
-        
-        # WHERE clause
         if isinstance(node, exp.Where):
             clauses.add("WHERE")
-        
-        # JOIN clauses
         if isinstance(node, exp.Join):
             clauses.add("JOIN")
             if node.kind:
@@ -62,14 +56,10 @@ def extract_sql_clauses(ast: Any) -> List[str]:
             clauses.add("INTERSECT")
         if isinstance(node, exp.Except):
             clauses.add("EXCEPT")
-        
-        # CTE (WITH clause)
         if isinstance(node, exp.CTE):
             clauses.add("CTE")
         if isinstance(node, exp.With):
             clauses.add("WITH")
-        
-        # DISTINCT
         if isinstance(node, exp.Select):
             if node.args.get("distinct"):
                 clauses.add("DISTINCT")
@@ -117,8 +107,6 @@ def extract_sql_clauses(ast: Any) -> List[str]:
             clauses.add("DELETE")
         if isinstance(node, exp.Merge):
             clauses.add("MERGE")
-        
-        # RETURNING (Postgres DML returning clause)
         if isinstance(node, exp.Returning):
             clauses.add("RETURNING")
     
@@ -196,28 +184,8 @@ def get_clause_for_node(node: Any) -> List[str]:
     return sorted(list(clauses))
 
 
-# =============================================================================
-# Complexity Calculation
-# =============================================================================
-
 def calculate_complexity(ast: Any) -> int:
-    """
-    Calculate complexity score for a SQL query.
-    
-    Uses weighted scoring:
-    - CTE: 2 points each
-    - Subquery: 1 point each
-    - Join: 1 point each
-    - Aggregation function: 1 point each
-    - Case statement: 1 point each
-    - Union/Intersect/Except: 2 points each
-    
-    Args:
-        ast: sqlglot Expression AST node
-    
-    Returns:
-        Complexity score (integer)
-    """
+    """Weighted complexity: CTE 2, subquery/join/agg/case 1, union 2."""
     if ast is None:
         return 0
     
@@ -258,7 +226,7 @@ def calculate_complexity(ast: Any) -> int:
 
 
 def count_query_elements(ast: Any) -> dict:
-    """Return counts of joins, subqueries, ctes, aggregations, etc."""
+    """Count joins, subqueries, ctes, aggregations, etc."""
     if ast is None:
         return {
             'joins': 0,
@@ -382,8 +350,6 @@ def generate_pattern_signature(ast: Any) -> str:
         "UNION", "INTERSECT", "EXCEPT", "SUBQUERY",
         "INSERT", "UPDATE", "DELETE", "MERGE", "RETURNING",
     ]
-    
-    # Build signature in logical order
     signature_parts = []
     for clause in clause_order:
         if clause in clauses:
@@ -403,7 +369,7 @@ def generate_pattern_signature(ast: Any) -> str:
 
 
 def analyze_query(ast: Any) -> QueryMetadata:
-    """Return QueryMetadata (complexity, signature, clauses, counts)."""
+    """QueryMetadata: complexity, signature, clauses, counts."""
     if ast is None:
         return QueryMetadata(
             complexity_score=0,

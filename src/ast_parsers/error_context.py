@@ -36,7 +36,7 @@ from ast_parsers.error_codes import (
 
 
 def extract_diagnostics(exception: Any) -> Diagnostics:
-    """Extract err.diag.*-style fields from exception. Missing fields are None."""
+    """err.diag.*-style fields from exception; missing fields None."""
     message_primary = getattr(exception, "pgerror", None) or getattr(exception, "message", None) if exception else None
     if message_primary is None and exception is not None:
         message_primary = str(exception)
@@ -47,7 +47,6 @@ def extract_diagnostics(exception: Any) -> Diagnostics:
     if exception is None:
         return Diagnostics(message_primary=message_primary)
 
-    # Driver-specific diag object (psycopg2, psycopg3)
     inner = getattr(exception, "diag", None)
     if inner is not None:
         message_primary = _get_attr(inner, "message_primary") or message_primary
@@ -135,23 +134,12 @@ def _get_sqlstate_from_exception(exception: Any) -> Optional[str]:
     code = getattr(exception, "pgcode", None) or getattr(exception, "sqlstate", None)
     if code is not None:
         return str(code).strip()
-    # Fallback: extract from message
     msg = getattr(exception, "pgerror", None) or str(exception)
     return extract_error_code(msg)
 
 
-# =============================================================================
-# 2) Convert diagnostic fields into high-confidence tags (pg_diag-derived)
-# =============================================================================
-
 def tags_from_cursor_diagnostics(diagnostics: Optional[Diagnostics]) -> List[TagWithProvenance]:
-    """
-    Generate tags from PostgreSQL diagnostic fields (err.diag.*). pg_diag-derived tags are high confidence.
-    column_name → schema_hallucination_col / schema_ambiguous_col (by SQLSTATE)
-    table_name → schema_hallucination_table, join_missing_join
-    constraint_name → logical_unique_violation, logical_foreign_key_violation, etc.
-    datatype_name → schema_type_mismatch, value_format_mismatch, filter_type_mismatch_where
-    """
+    """Tags from err.diag.* (high confidence)."""
     out: List[TagWithProvenance] = []
     if diagnostics is None:
         return out
@@ -241,7 +229,7 @@ def tags_from_sqlstate(sqlstate: Optional[str]) -> List[TagWithProvenance]:
 
 
 def tags_from_regex(message: Optional[str]) -> List[TagWithProvenance]:
-    """Infer tag from error message when SQLSTATE/diag not available. Low confidence."""
+    """Tags from message when SQLSTATE/diag unavailable (low confidence)."""
     out: List[TagWithProvenance] = []
     if not message:
         return out
@@ -292,7 +280,6 @@ def tags_from_position(sql: str, position: Optional[int], diagnostics: Optional[
         return out
     token = loc.get("token")
     snippet = (loc.get("context_snippet") or "").upper()
-    # Heuristics: trailing comma before keyword
     if "," in snippet and any(kw in snippet for kw in ("FROM", "WHERE", "GROUP", "ORDER", "JOIN", "HAVING", "LIMIT")):
         out.append(TagWithProvenance(
             tag=SyntaxErrorTags.TRAILING_DELIMITER,
@@ -314,20 +301,12 @@ def tags_from_position(sql: str, position: Optional[int], diagnostics: Optional[
     return out
 
 
-# =============================================================================
-# 5) Combine PostgreSQL diagnostics with AST analysis (cross-signals)
-# =============================================================================
-
 def tags_from_ast_cross_signals(
     ast: Any,
     diagnostics: Optional[Diagnostics],
     sqlstate: Optional[str],
 ) -> List[TagWithProvenance]:
-    """
-    Cross-signals: undefined column + column in subquery → subquery_incorrect_correlation;
-    GROUP BY error + aggregate/non-aggregate mix → aggregation_missing_groupby;
-    table not joined → join_missing_join.
-    """
+    """Cross-signals: column+subquery, GROUP BY+agg, missing join."""
     out: List[TagWithProvenance] = []
     if ast is None:
         return out
@@ -373,20 +352,12 @@ def tags_from_ast_cross_signals(
     return out
 
 
-# =============================================================================
-# 6) Build ErrorContext from pipeline input { sql, ast, error }
-# =============================================================================
-
 def build_error_context(
     sql: str,
     ast: Optional[Any] = None,
     error: Optional[Any] = None,
 ) -> ErrorContext:
-    """
-    Build structured ErrorContext from pipeline input.
-    Extracts full diagnostic surface, derives tags with provenance and confidence,
-    and combines cursor diagnostics with AST cross-signals.
-    """
+    """Build ErrorContext from sql, optional ast and error; tags with provenance."""
     diagnostics = extract_diagnostics(error) if error is not None else None
     sqlstate = _get_sqlstate_from_exception(error) if error is not None else None
     if sqlstate is None and diagnostics and diagnostics.message_primary:

@@ -1,6 +1,14 @@
 # -*- coding: utf-8 -*-
 """SQL validation (syntax + optional schema) and ErrorContext from PostgreSQL err.diag.*."""
 
+from ast_parsers.models import (
+    ValidationInput,
+    ValidationResultOut,
+    ValidationErrorOut,
+    QueryMetadataOut,
+    TagName,
+    ALL_TAG_NAMES,
+)
 from ast_parsers.errors import (
     ValidationResult,
     ValidationError,
@@ -53,6 +61,15 @@ from ast_parsers.error_context import (
 __version__ = "0.1.0"
 
 __all__ = [
+    # Pydantic models (input / output contracts)
+    "ValidationInput",
+    "ValidationResultOut",
+    "ValidationErrorOut",
+    "QueryMetadataOut",
+    "TagName",
+    "ALL_TAG_NAMES",
+    "ClauseName",
+    "ALL_CLAUSE_NAMES",
     # Core validation
     "ValidationResult",
     "ValidationError",

@@ -6,7 +6,7 @@ from typing import Optional, List, Any, Dict
 
 
 class SyntaxErrorTags:
-    """Static analysis (syntax) error tags."""
+    """Syntax error tags."""
     SYNTAX_ERROR = "syntax_error"
     UNBALANCED_TOKENS = "syntax_unbalanced_tokens"
     TRAILING_DELIMITER = "syntax_trailing_delimiter"
@@ -17,7 +17,7 @@ class SyntaxErrorTags:
 
 
 class SchemaErrorTags:
-    """Semantic (schema) error tags."""
+    """Schema/semantic error tags."""
     HALLUCINATION_TABLE = "schema_hallucination_table"
     HALLUCINATION_COLUMN = "schema_hallucination_col"
     AMBIGUOUS_COLUMN = "schema_ambiguous_col"
@@ -29,7 +29,7 @@ class SchemaErrorTags:
 
 
 class LogicalErrorTags:
-    """Logical error tags (grouping, integrity, etc.)."""
+    """Logical error tags."""
     GROUPING_ERROR = "logical_grouping_error"
     AGGREGATION_ERROR = "logical_aggregation_error"
     WINDOWING_ERROR = "logical_windowing_error"
@@ -40,7 +40,7 @@ class LogicalErrorTags:
 
 
 class JoinErrorTags:
-    """Join-related error tags."""
+    """Join error tags."""
     MISSING_JOIN = "join_missing_join"
     WRONG_JOIN_TYPE = "join_wrong_join_type"
     EXTRA_TABLE = "join_extra_table"
@@ -48,7 +48,7 @@ class JoinErrorTags:
 
 
 class AggregationErrorTags:
-    """Aggregation-related error tags."""
+    """Aggregation error tags."""
     MISSING_GROUPBY = "aggregation_missing_groupby"
     MISUSE_HAVING = "aggregation_misuse_having"
     AGGREGATION_ERROR = "aggregation_error"
@@ -69,7 +69,7 @@ class SubqueryErrorTags:
 
 
 class SetOperationErrorTags:
-    """Set operation error tags (UNION, INTERSECT, EXCEPT)."""
+    """Set operation error tags."""
     UNION_ERROR = "set_union_error"
     INTERSECTION_ERROR = "set_intersection_error"
     EXCEPT_ERROR = "set_except_error"
@@ -82,7 +82,7 @@ class StructuralErrorTags:
     STRUCTURAL_ERROR = "structural_error"
 
 
-# Provenance: pg_diag = PostgreSQL err.diag.* (NOT a DB cursor or editor).
+# pg_diag = PostgreSQL err.diag.* (not a DB cursor).
 SOURCE_PG_DIAG_COLUMN_NAME = "pg_diag.column_name"
 SOURCE_PG_DIAG_TABLE_NAME = "pg_diag.table_name"
 SOURCE_PG_DIAG_CONSTRAINT_NAME = "pg_diag.constraint_name"
@@ -111,7 +111,7 @@ class TagWithProvenance:
 
 @dataclass
 class Diagnostics:
-    """PostgreSQL error diagnostics (err.diag.*). Fields may be None if not exposed."""
+    """PostgreSQL err.diag.* fields; missing fields are None."""
     message_primary: Optional[str] = None
     message_detail: Optional[str] = None
     message_hint: Optional[str] = None
@@ -162,7 +162,7 @@ class ErrorContext:
 
 @dataclass
 class ValidationError:
-    """Single validation error with tag, message, optional location/context/error_code."""
+    """One validation error: tag, message, optional location/context/error_code."""
     tag: str
     message: str
     location: Optional[int] = None
@@ -225,16 +225,7 @@ class QueryMetadata:
 
 @dataclass
 class ValidationResult:
-    """
-    Result of SQL query validation.
-    
-    Attributes:
-        valid: Whether the query passed validation
-        errors: List of validation errors found
-        ast: The parsed AST (sqlglot Expression) if parsing succeeded
-        sql: The original SQL query that was validated
-        query_metadata: Metadata about query structure and complexity (if analyzed)
-    """
+    """Validation result: valid flag, errors, optional ast/sql/query_metadata."""
     valid: bool
     errors: List[ValidationError] = field(default_factory=list)
     ast: Optional[Any] = None  # sqlglot.Expression, using Any to avoid import

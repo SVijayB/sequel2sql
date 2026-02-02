@@ -127,7 +127,7 @@ TAXONOMY_CATEGORIES: Dict[str, List[str]] = {
 
 
 def extract_error_code(error_message: str) -> Optional[str]:
-    """Extract SQLSTATE from message (direct code or pattern match). Returns None if not found."""
+    """Extract SQLSTATE from message; None if not found."""
     sqlstate_pattern = r'(?:SQLSTATE|ERROR)[\s:]*([0-9][0-9A-Z]{4})|\[([0-9][0-9A-Z]{4})\]'
     match = re.search(sqlstate_pattern, error_message, re.IGNORECASE)
     if match:
@@ -179,7 +179,7 @@ def get_taxonomy_category(error_code: Optional[str]) -> Optional[str]:
 
 
 def get_tags_for_category(category: Optional[str]) -> List[str]:
-    """Return tags for a taxonomy category. Empty list if unknown."""
+    """Tags for a taxonomy category; [] if unknown."""
     if category is None:
         return []
     
@@ -199,10 +199,7 @@ SQLSTATE_CLASS_FALLBACK: Dict[str, str] = {
 
 
 def get_taxonomy_category_with_fallback(error_code: Optional[str]) -> Optional[str]:
-    """
-    Map PostgreSQL error code to taxonomy category.
-    Prefer specific SQLSTATE mapping, then class-level fallback (42xxx, 22xxx, etc.).
-    """
+    """Map SQLSTATE to category; use class fallback if exact code unknown."""
     if error_code is None:
         return None
     specific = POSTGRES_ERROR_CODE_MAP.get(error_code)
@@ -242,12 +239,10 @@ def get_tag_for_sqlstate(sqlstate: Optional[str]) -> Optional[str]:
 
 
 def get_category_for_tag(tag: str) -> Optional[str]:
-    """Return taxonomy category for a tag, or None."""
+    """Taxonomy category for a tag, or None."""
     for category, tags in TAXONOMY_CATEGORIES.items():
         if tag in tags or tag.startswith(category + "_"):
             return category
-    
-    # Check prefix patterns
     if tag.startswith("syntax_"):
         return "syntax"
     elif tag.startswith("schema_"):

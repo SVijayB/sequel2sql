@@ -18,7 +18,6 @@ from ast_parsers.error_codes import (
     extract_error_code,
     get_taxonomy_category,
     get_taxonomy_category_with_fallback,
-    get_category_for_tag,
 )
 from ast_parsers.query_analyzer import (
     analyze_query,
@@ -26,41 +25,13 @@ from ast_parsers.query_analyzer import (
 )
 
 
-# =============================================================================
-# Part 1: Static Analysis (Syntax Validation)
-# =============================================================================
-
 def validate_syntax(
     sql: str,
     dialect: str = "postgres",
 ) -> ValidationResult:
-    """
-    Validate SQL query syntax using sqlglot parser.
-    
-    This performs static analysis to detect basic syntax errors,
-    malformed SQL, and common LLM artifacts like trailing delimiters.
-    
-    Args:
-        sql: The SQL query string to validate
-        dialect: SQL dialect (default: "postgres")
-    
-    Returns:
-        ValidationResult with valid=True if syntax is correct,
-        or valid=False with error details and tags
-    
-    Example:
-        >>> result = validate_syntax("SELECT id, name, FROM users")
-        >>> result.valid
-        False
-        >>> result.tags
-        ['syntax_trailing_delimiter']
-    """
+    """Validate SQL syntax with sqlglot. Invalid syntax => ast/query_metadata usually None."""
     try:
-        # Attempt to parse the SQL
         ast = sqlglot.parse_one(sql, read=dialect)
-        
-        # Check for issues that sqlglot silently fixes (like trailing commas)
-        # by detecting patterns in the original SQL
         silent_errors = _detect_silent_fixes(sql)
         if silent_errors:
             result = ValidationResult(valid=False, errors=silent_errors, ast=ast, sql=sql)
@@ -78,7 +49,7 @@ def validate_syntax(
             ast = sqlglot.parse_one(sql, read=dialect)
             result.ast = ast
             result.query_metadata = analyze_query(ast)
-        except:
+        except ParseError:
             pass
         return result
     
@@ -112,15 +83,8 @@ def validate_syntax(
 
 
 def _detect_silent_fixes(sql: str) -> list:
-    """
-    Detect issues that sqlglot silently fixes during parsing.
-    
-    sqlglot is lenient and auto-corrects some issues like trailing commas.
-    We detect these by pattern matching on the original SQL.
-    """
+    """Detect issues sqlglot silently fixes (e.g. trailing comma) via pattern match on original SQL."""
     errors = []
-    
-    # Check for trailing commas before keywords (sqlglot silently removes these)
     trailing_pos = _find_trailing_delimiter(sql, "")
     if trailing_pos is not None:
         errors.append(ValidationError(
@@ -129,12 +93,14 @@ def _detect_silent_fixes(sql: str) -> list:
             location=trailing_pos,
             context=sql[max(0, trailing_pos-10):trailing_pos+15],
         ))
+        return errors
     if _has_empty_select(sql):
         errors.append(ValidationError(
             tag=SyntaxErrorTags.KEYWORD_MISUSE,
             message="SELECT clause has no columns specified",
         ))
-    
+        return errors
+
     return errors
 
 
@@ -147,12 +113,7 @@ def _has_empty_select(sql: str) -> bool:
 
 
 def _classify_syntax_error(sql: str, error: ParseError) -> list:
-    """
-    Classify a syntax error and return appropriate error tags.
-    
-    Analyzes the error message and SQL context to determine
-    the specific type of syntax error.
-    """
+    """Classify ParseError into one tag from message and SQL context."""
     error_message = str(error)
     errors = []
     location = getattr(error, "col", None)
@@ -167,7 +128,8 @@ def _classify_syntax_error(sql: str, error: ParseError) -> list:
             error_code=error_code,
             taxonomy_category=taxonomy_category or "syntax",
         ))
-    
+        return errors
+
     # 2. Check for trailing delimiters (common LLM error)
     trailing_pos = _find_trailing_delimiter(sql, error_message)
     if trailing_pos is not None:
@@ -187,6 +149,7 @@ def _classify_syntax_error(sql: str, error: ParseError) -> list:
             error_code=error_code,
             taxonomy_category=taxonomy_category or "syntax",
         ))
+        return errors
 
     msg_lower = error_message.lower()
     if not errors and ("expecting )" in msg_lower or "expecting (" in msg_lower):
@@ -237,7 +200,7 @@ def _has_unbalanced_tokens(sql: str) -> bool:
 
 
 def _get_unbalanced_context(sql: str) -> str:
-    """Get context about which tokens are unbalanced."""
+    """Describe which parens/brackets are unbalanced."""
     parens_diff = sql.count('(') - sql.count(')')
     brackets_diff = sql.count('[') - sql.count(']')
     
@@ -272,7 +235,7 @@ def _find_trailing_delimiter(sql: str, error_message: str) -> Optional[int]:
 
 
 def _has_unterminated_string(sql: str) -> bool:
-    """Check for unterminated string literals."""
+    """Heuristic: odd quote count. May misclassify with '' or backslash; parser message is primary."""
     single_quotes = sql.count("'") - sql.count("\\'") * 2
     double_quotes = sql.count('"') - sql.count('\\"') * 2
     return single_quotes % 2 != 0 or double_quotes % 2 != 0
@@ -310,10 +273,8 @@ def validate_schema(
             context=table_name,
             error_code=error_code,
             taxonomy_category=taxonomy_category or "semantic",
-            affected_clauses=["FROM"],  # Table errors typically affect FROM clause
+            affected_clauses=["FROM"],
         ))
-    
-    # If tables are missing, we can't accurately validate columns
     if missing_tables:
         result = ValidationResult(valid=False, errors=errors, ast=parsed, sql=sql)
         result.query_metadata = analyze_query(parsed)
@@ -360,13 +321,7 @@ def _check_tables_exist(parsed: exp.Expression, schema: Dict) -> list:
 
 
 def _classify_schema_error(error_message: str, ast: Optional[Any] = None) -> list:
-    """
-    Classify a schema validation error into specific tags.
-    
-    Args:
-        error_message: Error message string
-        ast: Optional AST node to determine affected clauses
-    """
+    """Classify schema/optimize error into one tag; optional ast for affected_clauses."""
     errors = []
     msg_lower = error_message.lower()
     error_code = extract_error_code(error_message)
@@ -429,42 +384,10 @@ def validate_query(
     schema: Optional[Dict[str, Dict[str, str]]] = None,
     dialect: str = "postgres",
 ) -> ValidationResult:
-    """
-    Validate SQL query with optional schema validation.
-    
-    This is the main entry point for query validation. It runs:
-    1. Part 1: Static Analysis (syntax validation) - always
-    2. Part 2: Semantic Validation (schema validation) - if schema provided
-    
-    Args:
-        sql: The SQL query string to validate
-        schema: Optional schema definition as dict of {table_name: {column_name: type}}
-        dialect: SQL dialect (default: "postgres")
-    
-    Returns:
-        ValidationResult with validation status and any errors found
-    
-    Example:
-        >>> # Syntax-only validation
-        >>> result = validate_query("SELECT * FROM users")
-        >>> result.valid
-        True
-        
-        >>> # With schema validation
-        >>> schema = {"users": {"id": "int", "name": "text"}}
-        >>> result = validate_query("SELECT address FROM users", schema=schema)
-        >>> result.valid
-        False
-        >>> result.tags
-        ['schema_hallucination_col']
-    """
-    # Part 1: Static Analysis (always run)
+    """Main entry: syntax validation always; schema validation if schema provided."""
     syntax_result = validate_syntax(sql, dialect=dialect)
-    
     if not syntax_result.valid:
         return syntax_result
-    
-    # Part 2: Semantic Validation (only if schema provided)
     if schema is not None:
         schema_result = validate_schema(sql, schema, dialect=dialect)
         if schema_result.ast is None:
