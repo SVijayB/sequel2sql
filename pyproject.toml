@@ -2,7 +2,7 @@
 name = "sequel2sql"
 version = "0.1.0"
 description = "An agentic LLM + RAG framework for PostgreSQL error diagnosis, optimization, and correction."
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = [
     "datasets>=3.0.0",
     "flask>=3.1.2",
