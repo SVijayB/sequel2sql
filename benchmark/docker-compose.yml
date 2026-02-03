@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  postgresql:
+    build:
+      context: .
+      dockerfile: ./env/Dockerfile.postgresql
+    container_name: sequel2sql_postgresql
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 123123
+      POSTGRES_DB: postgres
+      TZ: "UTC"
+    volumes:
+      - postgresql_data:/var/lib/postgresql/data
+      - ./data/postgre_table_dumps:/docker-entrypoint-initdb.d/postgre_table_dumps
+    command:
+      - "-c"
+      - "max_connections=300"
+      - "-c"
+      - "shared_buffers=256MB"
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  so_eval_env:
+    build:
+      context: .
+      dockerfile: ./env/Dockerfile.so_eval
+    container_name: sequel2sql_eval
+    volumes:
+      - ./:/app/
+      - ./data/postgre_table_dumps:/app/postgre_table_dumps
+    working_dir: /app
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    command: ["tail", "-f", "/dev/null"]
+    restart: unless-stopped
+
+volumes:
+  postgresql_data:
