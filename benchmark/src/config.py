@@ -17,8 +17,6 @@ load_dotenv(ENV_PATH)
 MODEL_CONFIG = {
     "model_name": "models/gemma-3-27b-it",
     "base_url": "https://generativelanguage.googleapis.com/v1beta",
-    "temperature": 0.0,
-    "max_tokens": 2048,
     "timeout": 10,  # seconds
     "max_threads": 8,
     "checkpoint_frequency": 10,  # Save checkpoint every N queries

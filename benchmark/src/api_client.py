@@ -122,10 +122,7 @@ class GeminiAPIClient:
                 response = self.client.models.generate_content(
                     model=self.model_config["model_name"],
                     contents=prompt,
-                    config=types.GenerateContentConfig(
-                        temperature=self.model_config["temperature"],
-                        max_output_tokens=self.model_config["max_tokens"],
-                    ),
+                    config=types.GenerateContentConfig(),
                 )
 
                 # Extract text from response
