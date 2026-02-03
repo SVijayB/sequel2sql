@@ -1,16 +1,17 @@
 # SEQUEL2SQL Benchmark
 
-A clean, user-friendly console application for running the BIRD-CRITIC PostgreSQL benchmark (531 queries) using Google Gemma 3 27B with intelligent API key rotation and full Docker-based evaluation.
+A clean, user-friendly console application for running the BIRD-CRITIC PostgreSQL benchmark (530 queries) using Google Gemma 3 27B with intelligent API key rotation and full Docker-based evaluation.
+
+This benchmark tool was built with a lot of code being reused from the [BIRD-CRITIC-1](https://github.com/bird-bench/BIRD-CRITIC-1) repository. 
+You can refer to it for more details on the benchmark dataset and evaluation methodology along with data sources.
 
 ## Features
 
-- 🚀 **PostgreSQL Focus**: 531 real-world SQL debugging queries
-- 🤖 **Gemma 3 27B**: Google's latest AI model for SQL generation  
-- 🔄 **Smart API Key Rotation**: Automatic cycling through 8 API keys with rate limit handling
-- 📊 **Progress Tracking**: Real-time progress bars with statistics
-- 💾 **Resume Capability**: Checkpoint every 10 queries to resume interrupted runs
-- 🐳 **Docker Evaluation**: Full PostgreSQL database validation
-- 📝 **Dual Logging**: Console output + detailed file logs
+- **Smart API Key Rotation**: Automatic cycling through 8 API keys with rate limit handling
+- **Progress Tracking**: Real-time progress bars with statistics
+- **Resume Capability**: Checkpoint every 10 queries to resume interrupted runs
+- **Docker Evaluation**: Full PostgreSQL database validation
+- **Dual Logging**: Console output + detailed file logs
 
 ## Quick Start
 
@@ -44,6 +45,27 @@ cd /home/svijayb/sequel2sql
 uv sync
 ```
 
+### 3. Download Dataset
+
+All of the datasets required are to be downloaded, extracted and placed inside the `/benchmark/data` directory.
+
+1) Download and extract postgre_table_dumps.zip from here: [Google drive link](https://drive.google.com/drive/folders/1nJReLrvZVVrnfgBYwwNEgYvLroPGbcPD).
+2) You can download both the full question and schema file along with the ground truth solution through this [Google drive link](https://drive.google.com/drive/folders/1-nD5nyt_9tutnqP1eudEDimRfW1c39Na?usp=sharing)
+
+Exact structure of `/benchmark/data` should be:
+
+```
+data/
+├── postgre_table_dumps/
+│   ├── california_schools_template/
+│   ├── card_games_template/
+│   ├── codebase_community_template/
+│   ├── debit_card_specializing_template/
+│   ├── ... 
+├── pg_sol.jsonl
+└── postgresql_full.jsonl
+```
+
 ### 3. Start Docker
 
 Make sure Docker is running:
@@ -69,18 +91,12 @@ The benchmark supports two modes:
 **Interactive Mode** (recommended for first-time users):
 ```bash
 ./benchmark.sh
-# You'll be prompted:
-# 1. Do you want to run a subset? [y/N]
-# 2. If yes, how many queries? [default: 20]
 ```
 
 **Command-Line Mode** (for automation):
 ```bash
 # Test with 20 queries
 ./benchmark.sh --limit 20
-
-# Test with 100 queries
-./benchmark.sh --limit 100
 
 # Run all 531 queries
 ./benchmark.sh

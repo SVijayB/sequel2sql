@@ -95,17 +95,10 @@ def validate_config() -> bool:
     postgresql_data = data_dir / "postgresql_full.jsonl"
     if not postgresql_data.exists():
         print(f"\n❌ Error: PostgreSQL dataset not found: {postgresql_data}")
-        print(f"\n💡 Please copy the dataset:")
-        print(
-            f"   cp bird-critic/baseline/data/postgresql_full.jsonl {postgresql_data}\n"
-        )
         sys.exit(1)
 
     postgre_dumps = data_dir / "postgre_table_dumps"
     if not postgre_dumps.exists():
-        print(f"\n❌ Error: PostgreSQL table dumps not found: {postgre_dumps}")
-        print(f"\n💡 Please copy the database dumps:")
-        print(f"   cp -r bird-critic/evaluation/postgre_table_dumps {postgre_dumps}\n")
         sys.exit(1)
 
     return True
