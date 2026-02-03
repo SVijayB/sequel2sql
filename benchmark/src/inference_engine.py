@@ -110,7 +110,8 @@ class InferenceEngine:
         prompts_data = load_prompts(prompts_path)
         total_queries = len(prompts_data)
 
-        self.checkpoint_manager.set_total_queries(total_queries)
+        # In resume mode, don't save checkpoint yet (it would overwrite completed_queries)
+        self.checkpoint_manager.set_total_queries(total_queries, save=not resume)
 
         # Determine which queries to process
         if resume:

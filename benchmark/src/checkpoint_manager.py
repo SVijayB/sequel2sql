@@ -27,6 +27,24 @@ class CheckpointManager:
         self.checkpoint_file = self.output_dir / "checkpoint.json"
         self.logger = get_logger()
 
+        # Try to load existing checkpoint, otherwise initialize with defaults
+        if self.checkpoint_file.exists():
+            try:
+                with open(self.checkpoint_file, "r", encoding="utf-8") as f:
+                    self.checkpoint_data = json.load(f)
+                self.logger.info(
+                    f"Loaded existing checkpoint: {self.checkpoint_data['completed_queries']}/{self.checkpoint_data['total_queries']} queries completed"
+                )
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to load checkpoint, initializing new one: {e}"
+                )
+                self._initialize_checkpoint_data()
+        else:
+            self._initialize_checkpoint_data()
+
+    def _initialize_checkpoint_data(self) -> None:
+        """Initialize checkpoint data with default values."""
         self.checkpoint_data = {
             "created_at": datetime.now().isoformat(),
             "last_updated": datetime.now().isoformat(),
@@ -219,10 +237,16 @@ class CheckpointManager:
         """Check if evaluation is completed."""
         return self.checkpoint_data.get("evaluation_completed", False)
 
-    def set_total_queries(self, total: int) -> None:
-        """Set the total number of queries."""
+    def set_total_queries(self, total: int, save: bool = True) -> None:
+        """Set the total number of queries.
+
+        Args:
+            total: Total number of queries
+            save: Whether to save checkpoint immediately (default True)
+        """
         self.checkpoint_data["total_queries"] = total
-        self.save_checkpoint()
+        if save:
+            self.save_checkpoint()
 
     def get_progress_percentage(self) -> float:
         """Get progress as percentage."""
