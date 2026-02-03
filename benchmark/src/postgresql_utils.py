@@ -1,14 +1,16 @@
 # db_utils.py
+import csv
+import json
+import os
+import re
 import subprocess
+import sys
+import time
+
 import psycopg2
+from logger import PrintLogger, log_section_footer, log_section_header
 from psycopg2 import OperationalError
 from psycopg2.pool import SimpleConnectionPool
-from logger import log_section_header, log_section_footer, PrintLogger
-import time
-import sys
-import json
-import re
-import os, csv
 
 _postgresql_pools = {}
 
@@ -17,7 +19,7 @@ DEFAULT_DB_CONFIG = {
     "maxconn": 10,
     "user": "root",
     "password": "123123",
-    "host": "bird_critic_postgresql",
+    "host": "sequel2sql_postgresql",
     "port": 5432,
 }
 
@@ -141,7 +143,7 @@ def reset_and_restore_database(db_name, pg_password, logger):
     3) dropdb
     4) createdb --template ...
     """
-    pg_host = "bird_critic_postgresql"
+    pg_host = "sequel2sql_postgresql"
     pg_port = 5432
     pg_user = "root"
 
@@ -235,7 +237,7 @@ def reset_and_restore_database(db_name, pg_password, logger):
 def create_ephemeral_db_copies(
     base_db_names, num_copies, pg_password, logger, max_retries=3
 ):
-    pg_host = "bird_critic_postgresql"
+    pg_host = "sequel2sql_postgresql"
     pg_port = 5432
     pg_user = "root"
     env_vars = os.environ.copy()
@@ -255,7 +257,7 @@ def create_ephemeral_db_copies(
             for attempt in range(max_retries):
                 try:
                     logger.info(
-                        f"Attempt {attempt+1}/{max_retries}: Dropping existing db {ephemeral_name} if exists"
+                        f"Attempt {attempt + 1}/{max_retries}: Dropping existing db {ephemeral_name} if exists"
                     )
                     drop_cmd = [
                         "dropdb",
@@ -278,7 +280,7 @@ def create_ephemeral_db_copies(
                     )
 
                     logger.info(
-                        f"Attempt {attempt+1}/{max_retries}: Creating ephemeral db {ephemeral_name} from {base_template}"
+                        f"Attempt {attempt + 1}/{max_retries}: Creating ephemeral db {ephemeral_name} from {base_template}"
                     )
                     create_cmd = [
                         "createdb",
@@ -306,7 +308,7 @@ def create_ephemeral_db_copies(
                     break
 
                 except subprocess.SubprocessError as e:
-                    logger.error(f"Attempt {attempt+1}/{max_retries} failed: {e}")
+                    logger.error(f"Attempt {attempt + 1}/{max_retries} failed: {e}")
                     if attempt == max_retries - 1:
                         logger.error(
                             f"Failed to create {ephemeral_name} after {max_retries} attempts"
@@ -333,7 +335,7 @@ def drop_ephemeral_dbs(ephemeral_db_pool_dict, pg_password, logger):
     """
     Delete all ephemeral databases created during the script execution.
     """
-    pg_host = "bird_critic_postgresql"
+    pg_host = "sequel2sql_postgresql"
     pg_port = 5432
     pg_user = "root"
     env_vars = os.environ.copy()
@@ -382,7 +384,7 @@ def execute_queries(queries, db_name, conn, logger=None, section_title=""):
 
     for i, query in enumerate(queries):
         try:
-            logger.info(f"Executing query {i+1}/{len(queries)}: {query}")
+            logger.info(f"Executing query {i + 1}/{len(queries)}: {query}")
             query_result, conn = perform_query_on_postgresql_databases(
                 query, db_name, conn=conn
             )
@@ -390,25 +392,25 @@ def execute_queries(queries, db_name, conn, logger=None, section_title=""):
 
         except psycopg2.errors.QueryCanceled as e:
             # Timeout error
-            logger.error(f"Timeout error executing query {i+1}: {e}")
+            logger.error(f"Timeout error executing query {i + 1}: {e}")
             timeout_error = True
             break
 
         except OperationalError as e:
             # Operational errors (e.g., server not available, etc.)
-            logger.error(f"OperationalError executing query {i+1}: {e}")
+            logger.error(f"OperationalError executing query {i + 1}: {e}")
             execution_error = True
             break
 
         except psycopg2.Error as e:
             # Other psycopg2 errors (e.g., syntax errors, constraint violations)
-            logger.error(f"psycopg2 Error executing query {i+1}: {e}")
+            logger.error(f"psycopg2 Error executing query {i + 1}: {e}")
             execution_error = True
             break
 
         except Exception as e:
             # Any other generic error
-            logger.error(f"Generic error executing query {i+1}: {e}")
+            logger.error(f"Generic error executing query {i + 1}: {e}")
             execution_error = True
             break
 

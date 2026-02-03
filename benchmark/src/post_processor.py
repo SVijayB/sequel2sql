@@ -49,7 +49,7 @@ def process_responses_file(input_path: Path, output_path: Path) -> int:
     # Load gold solutions
     gold_solutions = {}
     gold_sol_path = Path(__file__).parent.parent / "data" / "pg_sol.jsonl"
-    
+
     if gold_sol_path.exists():
         logger.info(f"Loading gold solutions from {gold_sol_path}")
         with open(gold_sol_path, "r", encoding="utf-8") as f:
@@ -73,7 +73,7 @@ def process_responses_file(input_path: Path, output_path: Path) -> int:
 
             # Add extracted SQL to data
             data["pred_sqls"] = sql_list
-            
+
             # Merge gold solution if available
             instance_id = data.get("instance_id")
             if instance_id and instance_id in gold_solutions:
@@ -90,7 +90,9 @@ def process_responses_file(input_path: Path, output_path: Path) -> int:
             f.write(json.dumps(data, ensure_ascii=False) + "\n")
 
     logger.info(f"✓ Processed {len(data_list)} responses and saved to {output_path}")
-    logger.info(f"  Merged {len([d for d in data_list if d.get('instance_id') in gold_solutions])} gold solutions")
+    logger.info(
+        f"  Merged {len([d for d in data_list if d.get('instance_id') in gold_solutions])} gold solutions"
+    )
 
     return len(data_list)
 

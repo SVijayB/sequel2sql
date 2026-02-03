@@ -9,7 +9,6 @@ services:
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: 123123
-      POSTGRES_DB: postgres
       TZ: "UTC"
     volumes:
       - postgresql_data:/var/lib/postgresql/data
