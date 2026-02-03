@@ -89,9 +89,9 @@ class GeminiAPIClient:
         if retry_count % len(self.api_keys) == 0 and retry_count > 0:
             self.logger.warning(
                 f"⚠️  All {len(self.api_keys)} API keys exhausted. "
-                f"Waiting 60 seconds before retrying..."
+                f"Waiting 15 seconds before retrying..."
             )
-            time.sleep(60)
+            time.sleep(15)
             self.logger.info("Resuming API calls with first key...")
 
     def call_api(self, prompt: str, max_retries: int = 24) -> str:

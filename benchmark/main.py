@@ -170,6 +170,8 @@ def run_evaluation(final_output_path: Path, output_dir: Path, num_threads: int =
             str(final_output_path.relative_to(benchmark_dir)),
             "--num_threads",
             str(num_threads),
+            "--mode",
+            "pred",
             "--report",
             "true",
         ]
