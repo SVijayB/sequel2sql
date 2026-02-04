@@ -5,6 +5,7 @@ description = "An agentic LLM + RAG framework for PostgreSQL error diagnosis, op
 requires-python = ">=3.12"
 dependencies = [
     "flask>=3.1.2",
+    "pydantic>=2.0.0",
     "requests>=2.32.5",
     "sqlglot>=20.0.0",
 ]

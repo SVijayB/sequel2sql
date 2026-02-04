@@ -8,6 +8,8 @@ from ast_parsers.models import (
     QueryMetadataOut,
     TagName,
     ALL_TAG_NAMES,
+    ClauseName,
+    ALL_CLAUSE_NAMES,
 )
 from ast_parsers.errors import (
     ValidationResult,
@@ -49,7 +51,6 @@ from ast_parsers.query_analyzer import (
     calculate_complexity,
     generate_pattern_signature,
     analyze_query,
-    get_clause_for_node,
     count_query_elements,
 )
 from ast_parsers.error_context import (
@@ -111,6 +112,5 @@ __all__ = [
     "calculate_complexity",
     "generate_pattern_signature",
     "analyze_query",
-    "get_clause_for_node",
     "count_query_elements",
 ]

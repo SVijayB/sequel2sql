@@ -21,7 +21,6 @@ from ast_parsers.error_codes import (
 )
 from ast_parsers.query_analyzer import (
     analyze_query,
-    get_clause_for_node,
 )
 
 

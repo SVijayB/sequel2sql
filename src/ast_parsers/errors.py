@@ -1,88 +1,70 @@
 # -*- coding: utf-8 -*-
-"""Error types and validation result classes for SQL query validation."""
+"""Error types and classes. See README.md."""
 
 from dataclasses import dataclass, field
 from typing import Optional, List, Any, Dict
 
 
-class SyntaxErrorTags:
-    """Syntax error tags."""
-    SYNTAX_ERROR = "syntax_error"
-    UNBALANCED_TOKENS = "syntax_unbalanced_tokens"
-    TRAILING_DELIMITER = "syntax_trailing_delimiter"
-    KEYWORD_MISUSE = "syntax_keyword_misuse"
-    UNTERMINATED_STRING = "syntax_unterminated_string"
-    INVALID_TOKEN = "syntax_invalid_token"
-    UNSUPPORTED_DIALECT = "syntax_unsupported_dialect"
+import json
+import os
+import sys
+
+def _load_error_data():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(current_dir, "data", "error_data.json")
+    try:
+        with open(data_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        # Fallback/Safety for when file isn't found (e.g. CI without data)
+        print(f"Warning: {data_path} not found.", file=sys.stderr)
+        return {"taxonomy_categories": {}}
+
+_ERROR_DATA = _load_error_data()
+_CATEGORIES = _ERROR_DATA.get("taxonomy_categories", {})
+
+def _create_tag_class(class_name, category_key, prefix_to_strip, name_overrides=None):
+    valid_tags = _CATEGORIES.get(category_key, [])
+    attrs = {}
+    overrides = name_overrides or {}
+    
+    for tag in valid_tags:
+        if tag in overrides:
+             attr_name = overrides[tag]
+        # Heuristic: If tag is exactly "{prefix}error", keep full name (e.g. SYNTAX_ERROR)
+        # Otherwise strip prefix (e.g. syntax_unbalanced_tokens -> UNBALANCED_TOKENS)
+        elif tag == f"{prefix_to_strip}error":
+             attr_name = tag.upper()
+        elif tag.startswith(prefix_to_strip):
+            attr_name = tag[len(prefix_to_strip):].upper()
+        else:
+            attr_name = tag.upper()
+        
+        attrs[attr_name] = tag
+    
+    # Create the class dynamically
+    return type(class_name, (), attrs)
+
+# Define classes using the dynamic generator
+SyntaxErrorTags = _create_tag_class("SyntaxErrorTags", "syntax", "syntax_")
+SchemaErrorTags = _create_tag_class(
+    "SchemaErrorTags", 
+    "semantic", 
+    "schema_",
+    name_overrides={
+        "schema_hallucination_col": "HALLUCINATION_COLUMN",
+        "schema_ambiguous_col": "AMBIGUOUS_COLUMN"
+    }
+)
+LogicalErrorTags = _create_tag_class("LogicalErrorTags", "logical", "logical_")
+JoinErrorTags = _create_tag_class("JoinErrorTags", "join_related", "join_")
+AggregationErrorTags = _create_tag_class("AggregationErrorTags", "aggregation", "aggregation_")
+FilterErrorTags = _create_tag_class("FilterErrorTags", "filter_conditions", "filter_")
+SubqueryErrorTags = _create_tag_class("SubqueryErrorTags", "subquery_formulation", "subquery_")
+SetOperationErrorTags = _create_tag_class("SetOperationErrorTags", "set_operations", "set_")
+StructuralErrorTags = _create_tag_class("StructuralErrorTags", "structural", "structural_")
 
 
-class SchemaErrorTags:
-    """Schema/semantic error tags."""
-    HALLUCINATION_TABLE = "schema_hallucination_table"
-    HALLUCINATION_COLUMN = "schema_hallucination_col"
-    AMBIGUOUS_COLUMN = "schema_ambiguous_col"
-    TYPE_MISMATCH = "schema_type_mismatch"
-    UNKNOWN_ERROR = "schema_unknown_error"
-    DUPLICATE_OBJECT = "schema_duplicate_object"
-    UNDEFINED_FUNCTION = "schema_undefined_function"
-    DATATYPE_MISMATCH = "schema_datatype_mismatch"
-
-
-class LogicalErrorTags:
-    """Logical error tags."""
-    GROUPING_ERROR = "logical_grouping_error"
-    AGGREGATION_ERROR = "logical_aggregation_error"
-    WINDOWING_ERROR = "logical_windowing_error"
-    INTEGRITY_VIOLATION = "logical_integrity_violation"
-    FOREIGN_KEY_VIOLATION = "logical_foreign_key_violation"
-    UNIQUE_VIOLATION = "logical_unique_violation"
-    CHECK_VIOLATION = "logical_check_violation"
-
-
-class JoinErrorTags:
-    """Join error tags."""
-    MISSING_JOIN = "join_missing_join"
-    WRONG_JOIN_TYPE = "join_wrong_join_type"
-    EXTRA_TABLE = "join_extra_table"
-    JOIN_CONDITION_ERROR = "join_condition_error"
-
-
-class AggregationErrorTags:
-    """Aggregation error tags."""
-    MISSING_GROUPBY = "aggregation_missing_groupby"
-    MISUSE_HAVING = "aggregation_misuse_having"
-    AGGREGATION_ERROR = "aggregation_error"
-
-
-class FilterErrorTags:
-    """Filter/WHERE error tags."""
-    INCORRECT_WHERE_COLUMN = "filter_incorrect_where_column"
-    TYPE_MISMATCH_WHERE = "filter_type_mismatch_where"
-    MISSING_WHERE = "filter_missing_where"
-
-
-class SubqueryErrorTags:
-    """Subquery-related error tags."""
-    UNUSED_SUBQUERY = "subquery_unused_subquery"
-    INCORRECT_CORRELATION = "subquery_incorrect_correlation"
-    SUBQUERY_ERROR = "subquery_error"
-
-
-class SetOperationErrorTags:
-    """Set operation error tags."""
-    UNION_ERROR = "set_union_error"
-    INTERSECTION_ERROR = "set_intersection_error"
-    EXCEPT_ERROR = "set_except_error"
-
-
-class StructuralErrorTags:
-    """Structural query error tags."""
-    MISSING_ORDERBY = "structural_missing_orderby"
-    MISSING_LIMIT = "structural_missing_limit"
-    STRUCTURAL_ERROR = "structural_error"
-
-
-# pg_diag = PostgreSQL err.diag.* (not a DB cursor).
 SOURCE_PG_DIAG_COLUMN_NAME = "pg_diag.column_name"
 SOURCE_PG_DIAG_TABLE_NAME = "pg_diag.table_name"
 SOURCE_PG_DIAG_CONSTRAINT_NAME = "pg_diag.constraint_name"
@@ -191,19 +173,8 @@ class ValidationError:
 
 @dataclass
 class QueryMetadata:
-    """
-    Metadata about a SQL query's structure and complexity.
-    
-    Attributes:
-        complexity_score: Overall complexity score (weighted sum of joins, subqueries, etc.)
-        pattern_signature: Structural fingerprint of the query (e.g., "SELECT-WHERE-JOIN-GROUPBY")
-        clauses_present: List of SQL clauses present in the query (e.g., ['SELECT', 'FROM', 'WHERE', 'JOIN'])
-        num_joins: Number of JOIN operations
-        num_subqueries: Number of subqueries
-        num_ctes: Number of CTEs (WITH clauses)
-        num_aggregations: Number of aggregation functions
-    """
-    complexity_score: int
+    """Metadata about a SQL query's structure and complexity."""
+    complexity_score: float
     pattern_signature: str
     clauses_present: List[str] = field(default_factory=list)
     num_joins: int = 0

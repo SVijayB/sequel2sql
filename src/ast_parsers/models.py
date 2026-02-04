@@ -1,111 +1,81 @@
 # -*- coding: utf-8 -*-
-"""Pydantic models for validation API: input (query, optional schema/ast) and output (result + tag set)."""
+"""Pydantic models for validation API. See README.md."""
 
-from typing import Any, Dict, List, Literal, Optional, get_args
+from typing import Any, Dict, List, Literal, Optional, Tuple, get_args
+import json
+import os
+import sys
 
 from pydantic import BaseModel, Field
 
 
-TagName = Literal[
-    "syntax_error",
-    "syntax_unbalanced_tokens",
-    "syntax_trailing_delimiter",
-    "syntax_keyword_misuse",
-    "syntax_unterminated_string",
-    "syntax_invalid_token",
-    "syntax_unsupported_dialect",
-    "syntax_invalid_name",
-    "syntax_invalid_column_definition",
-    "schema_hallucination_table",
-    "schema_hallucination_col",
-    "schema_ambiguous_col",
-    "schema_type_mismatch",
-    "schema_unknown_error",
-    "schema_duplicate_object",
-    "schema_undefined_function",
-    "schema_datatype_mismatch",
-    "schema_incorrect_foreign_key",
-    # Logical
-    "logical_grouping_error",
-    "logical_aggregation_error",
-    "logical_windowing_error",
-    "logical_integrity_violation",
-    "logical_foreign_key_violation",
-    "logical_unique_violation",
-    "logical_check_violation",
-    "join_missing_join",
-    "join_wrong_join_type",
-    "join_extra_table",
-    "join_condition_error",
-    # Aggregation
-    "aggregation_missing_groupby",
-    "aggregation_misuse_having",
-    "aggregation_error",
-    "filter_incorrect_where_column",
-    "filter_type_mismatch_where",
-    "filter_missing_where",
-    # Value
-    "value_hardcoded_value",
-    "value_format_mismatch",
-    "subquery_unused_subquery",
-    "subquery_incorrect_correlation",
-    "subquery_error",
-    # Set operations
-    "set_union_error",
-    "set_intersection_error",
-    "set_except_error",
-    "structural_missing_orderby",
-    "structural_missing_limit",
-    "structural_error",
-]
+def _load_error_data():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(current_dir, "data", "error_data.json")
+    try:
+        with open(data_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"Warning: {data_path} not found.", file=sys.stderr)
+        return {"taxonomy_categories": {}}
 
-# All tag strings the validator can return (for validation, docs, serialization)
-ALL_TAG_NAMES: tuple[str, ...] = get_args(TagName)
 
+def _load_complexity_config():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(current_dir, "data", "complexity_config.json")
+    try:
+        with open(data_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"Warning: {data_path} not found.", file=sys.stderr)
+        return {}
+
+_ERROR_DATA = _load_error_data()
+_COMPLEXITY_CONFIG = _load_complexity_config()
+_CATEGORIES = _ERROR_DATA.get("taxonomy_categories", {})
 
 # -----------------------------------------------------------------------------
-# Clause set: all clause names we detect and return (clauses_present, affected_clauses)
+# Error Tags (loaded from JSON)
+SyntaxTag = str
+SemanticTag = str
+LogicalTag = str
+JoinRelatedTag = str
+AggregationTag = str
+FilterTag = str
+ValueTag = str
+SubqueryTag = str
+SetOperationTag = str
+StructuralTag = str
+
+# Unified TagName
+TagName = str
+
+# All tag strings the validator can return
+_all_tags_list = []
+for tags in _CATEGORIES.values():
+    _all_tags_list.extend(tags)
+ALL_TAG_NAMES: Tuple[str, ...] = tuple(sorted(_all_tags_list))
+
+
+
+_CLAUSES = _COMPLEXITY_CONFIG.get("clause_complexity_categories", {})
+
+# -----------------------------------------------------------------------------
+# Clause set
 # -----------------------------------------------------------------------------
 
-ClauseName = Literal[
-    "SELECT",
-    "FROM",
-    "WHERE",
-    "JOIN",
-    "JOIN_INNER",
-    "JOIN_LEFT",
-    "JOIN_RIGHT",
-    "JOIN_FULL",
-    "JOIN_CROSS",
-    "GROUP",
-    "ORDER",
-    "HAVING",
-    "LIMIT",
-    "OFFSET",
-    "UNION",
-    "INTERSECT",
-    "EXCEPT",
-    "CTE",
-    "WITH",
-    "DISTINCT",
-    "DISTINCT_ON",
-    "WINDOW",
-    "PARTITION",
-    "FILTER",
-    "LATERAL",
-    "VALUES",
-    "QUALIFY",
-    "TABLESAMPLE",
-    "LOCKING",
-    "SUBQUERY",
-    "INSERT",
-    "UPDATE",
-    "DELETE",
-    "MERGE",
-    "RETURNING",
-]
+StandardClause = str
+JoinClause = str
+SetClause = str
+AdvancedClause = str
 
-ALL_CLAUSE_NAMES: tuple[str, ...] = get_args(ClauseName)
+# Unified ClauseName
+ClauseName = str
+
+_all_clauses_list = []
+for clauses in _CLAUSES.values():
+    _all_clauses_list.extend(clauses)
+ALL_CLAUSE_NAMES: Tuple[str, ...] = tuple(sorted(_all_clauses_list))
 
 
 class ValidationInput(BaseModel):
@@ -146,7 +116,7 @@ class ValidationErrorOut(BaseModel):
 class QueryMetadataOut(BaseModel):
     """Query structure: complexity, signature, clauses, counts."""
 
-    complexity_score: int = Field(..., description="Weighted complexity score")
+    complexity_score: float = Field(..., description="Normalized complexity score (0-1)")
     pattern_signature: str = Field(..., description="Structural fingerprint (e.g. SELECT-WHERE-JOIN)")
     clauses_present: List[ClauseName] = Field(default_factory=list, description="Clauses present in the query (canonical set)")
     num_joins: int = Field(default=0, description="Number of JOINs")
