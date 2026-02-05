@@ -1,3 +1,8 @@
+import sys
+import os
+# Add src to sys.path
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import logging
 import math
 from pathlib import Path
@@ -10,7 +15,7 @@ from sentence_transformers import SentenceTransformer
 import sqlglot
 from pydantic import BaseModel
 
-from src.ast_parsers.query_analyzer import analyze_query
+from ast_parsers.query_analyzer import analyze_query
 
 
 # ---------------------------------------------------------------------------
@@ -26,8 +31,15 @@ CHROMA_PATH = Path(__file__).parents[1] / "chroma_db"
 # Logging
 # ---------------------------------------------------------------------------
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Suppress noisy libraries
+logging.getLogger("chromadb").setLevel(logging.ERROR)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+logging.getLogger("tokenizers").setLevel(logging.WARNING)
 
 
 # ---------------------------------------------------------------------------
@@ -45,8 +57,7 @@ class FewShotExample(BaseModel):
     sql: str
 
     # Structural metadata
-    difficulty: Optional[str]
-    complexity_score: int
+    complexity_score: float
     pattern_signature: str
     clauses_present: List[str]
 
@@ -55,7 +66,6 @@ class FewShotExample(BaseModel):
 
     # Optional hooks for future use
     source_db: Optional[str] = None
-    example_id: Optional[str] = None
 
     class Config:
         validate_assignment = True
@@ -66,19 +76,15 @@ class FewShotExample(BaseModel):
 # Helper functions for diversity selection
 # ---------------------------------------------------------------------------
 
-def parse_clauses(meta_val: Any) -> Set[str]:
-    """Normalize clause metadata into a set."""
-    if meta_val is None:
+def parse_signature(sig: Any) -> Set[str]:
+    """Parse pattern signature string into a set of components."""
+    if not sig or not isinstance(sig, str):
         return set()
-    if isinstance(meta_val, list):
-        return set(map(str, meta_val))
-    if isinstance(meta_val, str):
-        return {s.strip() for s in meta_val.split(",") if s.strip()}
-    return set()
+    return set(sig.split("-"))
 
 
 def jaccard(a: Set[str], b: Set[str]) -> float:
-    """Jaccard similarity between two clause sets."""
+    """Jaccard similarity between two sets."""
     if not a and not b:
         return 1.0
     if not a or not b:
@@ -93,7 +99,7 @@ def mmr_select(
 ) -> List[Dict[str, Any]]:
     """
     Greedy Maximal Marginal Relevance (MMR) selection.
-    Balances semantic relevance with structural diversity.
+    Balances semantic relevance with structural diversity (via pattern signature).
     """
     if not candidates:
         return []
@@ -111,11 +117,11 @@ def mmr_select(
         for i, cand in enumerate(remaining):
             relevance = cand["_sim"]
 
-            cand_clauses = parse_clauses(cand["meta"].get("clauses_present"))
+            cand_sig = parse_signature(cand["meta"].get("pattern_signature"))
             max_overlap = max(
                 jaccard(
-                    cand_clauses,
-                    parse_clauses(s["meta"].get("clauses_present")),
+                    cand_sig,
+                    parse_signature(s["meta"].get("pattern_signature")),
                 )
                 for s in selected
             )
@@ -134,14 +140,14 @@ def mmr_select(
 def select_diverse_examples_from_chroma_results(
     results: Dict[str, Any],
     *,
-    per_difficulty: bool = True,
+    complexity_sampling: bool = True,
     max_examples: int = 6,
     candidate_pool_size: int = 40,
     diversity_lambda: float = 0.6,
 ) -> List[Dict[str, Any]]:
     """
     Post-process Chroma results to produce a diverse candidate set.
-    Uses optional difficulty stratification + MMR.
+    Uses optional complexity stratification + MMR (on pattern signatures).
     """
     docs = results["documents"][0]
     metas = results["metadatas"][0]
@@ -155,17 +161,40 @@ def select_diverse_examples_from_chroma_results(
     pool = candidates[:candidate_pool_size]
     selected: List[Dict[str, Any]] = []
 
-    # Step 1: stratify by difficulty (coverage)
-    if per_difficulty:
-        by_diff = defaultdict(list)
-        for c in pool:
-            by_diff[c["meta"].get("difficulty", "unknown")].append(c)
+    # Step 1: Dynamic Stratification by complexity score
+    # We define 3 dynamic buckets based on min/max of the candidates
+    if complexity_sampling:
+        pool_scores = [float(c["meta"].get("complexity_score", 0.0)) for c in pool]
+        if not pool_scores:
+            min_s, max_s = 0.0, 1.0
+        else:
+            min_s, max_s = min(pool_scores), max(pool_scores)
+        
+        # Avoid division by zero if all scores are identical
+        if max_s - min_s > 1e-6:
+             range_width = (max_s - min_s) / 3.0
+             t1 = min_s + range_width
+             t2 = min_s + 2 * range_width
+             
+             buckets = {"low": [], "medium": [], "high": []}
+             for c in pool:
+                 score = float(c["meta"].get("complexity_score", 0.0))
+                 if score <= t1:
+                     buckets["low"].append(c)
+                 elif score <= t2:
+                     buckets["medium"].append(c)
+                 else:
+                     buckets["high"].append(c)
 
-        for bucket in by_diff.values():
-            bucket.sort(key=lambda x: x["dist"])
-            selected.append(bucket[0])
-            if len(selected) >= max_examples:
-                return mmr_select(selected, max_examples, diversity_lambda)
+             # Select best from each bucket
+             for label in ["low", "medium", "high"]:
+                 bucket = buckets[label]
+                 if bucket:
+                     bucket.sort(key=lambda x: x["dist"])
+                     selected.append(bucket[0])
+
+             if len(selected) >= max_examples:
+                 return mmr_select(selected, max_examples, diversity_lambda)
 
     # Step 2: fill remaining slots via MMR
     selected_keys = {
@@ -225,6 +254,7 @@ def find_similar_examples(
     results = collection.query(
         query_embeddings=query_embedding,
         n_results=pool_size,
+        where={"document_type": "query_intent_pairs"},
         include=["documents", "metadatas", "distances"],
     )
 
@@ -233,7 +263,7 @@ def find_similar_examples(
 
     selected = select_diverse_examples_from_chroma_results(
         results,
-        per_difficulty=True,
+        complexity_sampling=True,
         max_examples=n_results,
         candidate_pool_size=pool_size,
         diversity_lambda=0.6,
@@ -258,8 +288,7 @@ def find_similar_examples(
             FewShotExample(
                 intent=ex["doc"],
                 sql=sql_text,
-                difficulty=meta.get("difficulty"),
-                complexity_score=int(meta.get("complexity_score", 0)),
+                complexity_score=float(meta.get("complexity_score", 0.0)),
                 pattern_signature=meta.get("pattern_signature", ""),
                 clauses_present=clauses,
                 distance=float(ex["dist"]),
@@ -268,28 +297,3 @@ def find_similar_examples(
         )
 
     return examples
-
-
-# ---------------------------------------------------------------------------
-# Demo entrypoint (debug only)
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    test_intent = (
-        "Find accounts with at least two transactions where the difference "
-        "between max and min transaction amounts exceeds 12000."
-    )
-
-    test_sql = (
-        "SELECT account_id "
-        "FROM trans "
-        "GROUP BY account_id "
-        "HAVING COUNT(trans_id) > 1 "
-        "AND (MAX(amount) - MIN(amount)) > 12000;"
-    )
-
-    examples = find_similar_examples(test_intent, test_sql)
-
-    for i, ex in enumerate(examples, 1):
-        print(f"\nExample #{i}")
-        print(ex.json(indent=2))
