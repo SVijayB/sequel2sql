@@ -1,3 +1,9 @@
 .vscode
+.env
+__pycache__/
+
+benchmark/outputs/
+benchmark/logs/
+benchmark/data/
 requirements.txt
 environment.yml
