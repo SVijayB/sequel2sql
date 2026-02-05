@@ -1,6 +1,3 @@
-# dbdex client: run dbdex against Postgres/MySQL in this stack (and SQLite via mounted volume).
-# Compatible with https://github.com/Finndersen/dbdex
-#
 # Build from repo root: docker compose -f docker/docker-compose.yml build dbdex
 # Run: docker compose -f docker/docker-compose.yml run --rm dbdex python -m dbdex --db-uri postgresql://root:123123@postgres:5432/postgres ...
 
