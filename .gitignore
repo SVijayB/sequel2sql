@@ -4,4 +4,5 @@ __pycache__/
 .DS_Store
 .venv/
 env/
-venv/
+requirements.txt
+environment.yml
