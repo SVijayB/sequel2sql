@@ -259,6 +259,60 @@ def count_query_elements(ast: Any) -> dict:
 # Pattern Signature Generation
 # =============================================================================
 
+# Canonical ordering for pattern signature
+CLAUSE_ORDER = [
+    "WITH",
+    "CTE",
+    "SELECT", 
+    "DISTINCT",
+    "DISTINCT_ON",
+    "FROM",
+    "JOIN",
+    "JOIN_INNER",
+    "JOIN_LEFT",
+    "JOIN_RIGHT",
+    "JOIN_FULL",
+    "JOIN_CROSS",
+    "LATERAL",
+    "WHERE",
+    "GROUP",
+    "HAVING",
+    "WINDOW",
+    "PARTITION",
+    "QUALIFY",
+    "UNION",
+    "INTERSECT",
+    "EXCEPT",
+    "ORDER",
+    "LIMIT",
+    "OFFSET",
+    "TABLESAMPLE",
+    "VALUES",
+    "FILTER",
+    "LOCKING",
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "MERGE",
+    "RETURNING",
+]
+
+def generate_ordered_pattern_signature(clauses: List[str]) -> str:
+    """Generate signature with canonical ordering."""
+    if not clauses:
+        return "UNKNOWN"
+        
+    ordered = [c for c in CLAUSE_ORDER if c in clauses]
+    
+    # Append any clauses not in the strict order (preserving their alphabetical sort)
+    # to ensure we don't lose information like 'SUBQUERY' or others not in the list
+    extras = sorted([c for c in clauses if c not in CLAUSE_ORDER])
+    if extras:
+        ordered.extend(extras)
+        
+    return "-".join(ordered) if ordered else "UNKNOWN"
+
+
 def generate_pattern_signature(ast: Any, clauses: List[str] = None) -> str:
     """Structural signature. See README.md."""
     if clauses is None:
@@ -266,16 +320,13 @@ def generate_pattern_signature(ast: Any, clauses: List[str] = None) -> str:
             return "EMPTY"
         clauses = extract_sql_clauses(ast)
     
-    # Check for empty clauses list even if ast was not None (or pre-computed list was empty)
     if not clauses:
-        if ast is None: # Double check to match original logic if passed directly
+        if ast is None: 
              return "EMPTY"
         return "UNKNOWN"
     
-    # Use alphabetical sort (clauses input is expected to be sorted, but ensure it)
-    # If it came from extract_sql_clauses it is sorted. 
-    # If passed from analyze_query it is sorted.
-    signature = "-".join(clauses)
+    # Use canonical ordering
+    signature = generate_ordered_pattern_signature(clauses)
     
     # For very long signatures, create a hash
     if len(signature) > 100:
