@@ -1,0 +1,65 @@
+{
+    "clause_complexity_categories": {
+        "standard": [
+            "SELECT",
+            "FROM",
+            "WHERE",
+            "GROUP",
+            "ORDER",
+            "HAVING",
+            "LIMIT",
+            "OFFSET",
+            "DISTINCT",
+            "DISTINCT_ON",
+            "VALUES",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "MERGE",
+            "RETURNING"
+        ],
+        "join": [
+            "JOIN",
+            "JOIN_INNER",
+            "JOIN_LEFT",
+            "JOIN_RIGHT",
+            "JOIN_FULL",
+            "JOIN_CROSS"
+        ],
+        "set": [
+            "UNION",
+            "INTERSECT",
+            "EXCEPT"
+        ],
+        "advanced": [
+            "CTE",
+            "WITH",
+            "WINDOW",
+            "PARTITION",
+            "FILTER",
+            "LATERAL",
+            "QUALIFY",
+            "TABLESAMPLE",
+            "LOCKING",
+            "SUBQUERY"
+        ]
+    },
+    "complexity_weights": {
+        "nesting_depth": 0.22,
+        "num_joins": 0.18,
+        "num_subqueries": 0.16,
+        "num_predicates": 0.14,
+        "num_tables": 0.10,
+        "num_boolean_ops": 0.10,
+        "num_aggregates": 0.06
+    },
+    "normalization_bounds": {
+        "nesting_depth": 5,
+        "num_joins": 10,
+        "num_subqueries": 5,
+        "num_predicates": 20,
+        "num_tables": 10,
+        "num_boolean_ops": 10,
+        "num_aggregates": 10
+    }
+}

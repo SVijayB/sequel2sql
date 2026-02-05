@@ -1,10 +1,9 @@
 .vscode
-
-# Environment variables
 .env
 __pycache__/
 
-# Benchmark outputs and logs
 benchmark/outputs/
 benchmark/logs/
 benchmark/data/
+requirements.txt
+environment.yml

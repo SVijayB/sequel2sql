@@ -13,4 +13,16 @@ dependencies = [
     "requests>=2.32.5",
     "rich>=14.3.2",
     "tqdm>=4.67.2",
+    "pydantic>=2.0.0",
+    "requests>=2.32.5",
+    "sqlglot>=20.0.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
