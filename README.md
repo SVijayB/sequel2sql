@@ -34,7 +34,6 @@
 ## Table of Contents
 
 -   [Motivation](#Motivation)
--   [Project Structure](#Project-Structure)
 -   [Installation](#Installation)
 -   [Docker Setup](#Docker-Setup)
 -   [Contributing](#Contributing)
@@ -54,21 +53,11 @@ Sequel2SQL uses retrieval-augmented generation and agent-based workflows by leve
     <img src="assets/flowchart.jpg" alt="Product Screenshot">
 </p>
 
-## Project Structure
-
-- **BIRD-CRITIC-1/**: Baseline models and evaluation framework for BIRD-Critic benchmark
-  - `baseline/`: Prompt generation and API calling for baseline models
-  - `evaluation/`: Multi-database testing utilities (PostgreSQL, MySQL, Oracle, SQL Server)
-  - `bird_fixer/`: SQL query correction and fixing utilities
-- **docker/**: Docker Compose stack for running SQL engines (PostgreSQL, MySQL, Oracle, SQL Server)
-- **src/**: Core sequel2sql library and utilities
-
 ## Docker Setup
 
 A Docker Compose stack provides SQL engine versions used by **BIRD-Critic**, **Spider 1.0/2.0**, with support for **PostgreSQL 14.12**, **MySQL 8.4.0**, **Oracle 19c**, and **SQL Server 2022**.
 
 ```bash
-cp docker/.env.example docker/.env
 docker compose -f docker/docker-compose.yml up -d postgres
 ```
 
