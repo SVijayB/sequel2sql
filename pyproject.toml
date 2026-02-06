@@ -6,9 +6,28 @@ requires-python = ">=3.12"
 dependencies = [
     "datasets>=3.0.0",
     "flask>=3.1.2",
+    "google-genai>=1.61.0",
+    "psycopg2-binary>=2.9.11",
+    "pyfiglet>=1.0.4",
+    "python-dotenv>=1.2.1",
+    "questionary>=2.1.1",
     "requests>=2.32.5",
     "psycopg2-binary>=2.9.9",
     "pymysql>=1.1.0",
     "pyodbc>=5.1.0",
     "oracledb>=2.0.0",
+    "rich>=14.3.2",
+    "tqdm>=4.67.2",
+    "pydantic>=2.0.0",
+    "requests>=2.32.5",
+    "sqlglot>=20.0.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
