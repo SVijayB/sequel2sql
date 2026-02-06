@@ -1,4 +1,6 @@
 .vscode
+
+# Environment variables
 __pycache__/
 *.pyc
 .DS_Store
@@ -11,3 +13,4 @@ benchmark/logs/
 benchmark/data/
 requirements.txt
 environment.yml
+CLAUDE.md
