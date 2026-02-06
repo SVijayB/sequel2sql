@@ -34,9 +34,9 @@
 ## Table of Contents
 
 -   [Motivation](#Motivation)
+-   [Project Structure](#Project-Structure)
 -   [Installation](#Installation)
--   [Usage](#Usage)
-    -   [Project Demo](#Demo)
+-   [Docker Setup](#Docker-Setup)
 -   [Contributing](#Contributing)
 -   [License](#License)
 
@@ -48,12 +48,31 @@ This is a capstone project for the MS in Data Science program at the University 
 
 The primary objective of this project was to build a system that can help data engineers in diagnosing, optimizing, and correcting SQL queries for PostgreSQL databases. While most LLMs are good at generating SQL queries from natural language (NL2SQL), they often struggle with fixing error queries and that is where Sequel2SQL comes in.
 
-Sequel2SQL uses retrieval-augmented generation and agent-based workflows by leveraging database schemas, official documentation, and past correction examples, making SQL debugging more reliable and easier to reason about, thereby impoving accuracy of query corrections.
+Sequel2SQL uses retrieval-augmented generation and agent-based workflows by leveraging database schemas, official documentation, and past correction examples, making SQL debugging more reliable and easier to reason about, thereby improving accuracy of query corrections.
 
 <p align="center">
     <img src="assets/flowchart.jpg" alt="Product Screenshot">
 </p>
 
+## Project Structure
+
+- **BIRD-CRITIC-1/**: Baseline models and evaluation framework for BIRD-Critic benchmark
+  - `baseline/`: Prompt generation and API calling for baseline models
+  - `evaluation/`: Multi-database testing utilities (PostgreSQL, MySQL, Oracle, SQL Server)
+  - `bird_fixer/`: SQL query correction and fixing utilities
+- **docker/**: Docker Compose stack for running SQL engines (PostgreSQL, MySQL, Oracle, SQL Server)
+- **src/**: Core sequel2sql library and utilities
+
+## Docker Setup
+
+A Docker Compose stack provides SQL engine versions used by **BIRD-Critic**, **Spider 1.0/2.0**, with support for **PostgreSQL 14.12**, **MySQL 8.4.0**, **Oracle 19c**, and **SQL Server 2022**.
+
+```bash
+cp docker/.env.example docker/.env
+docker compose -f docker/docker-compose.yml up -d postgres
+```
+
+See **[docker/README.md](docker/README.md)** for detailed engine versions, connection strings, and usage instructions.
 
 ## Installation
 
