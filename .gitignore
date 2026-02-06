@@ -1,6 +1,12 @@
 .vscode
-__pycache__
-CLAUDE.md
 
 # Environment variables
 .env
+__pycache__/
+
+benchmark/outputs/
+benchmark/logs/
+benchmark/data/
+requirements.txt
+environment.yml
+CLAUDE.md
