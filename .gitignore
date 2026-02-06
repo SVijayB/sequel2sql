@@ -4,5 +4,10 @@ __pycache__/
 .DS_Store
 .venv/
 env/
+.env
+
+benchmark/outputs/
+benchmark/logs/
+benchmark/data/
 requirements.txt
 environment.yml
