@@ -9,6 +9,7 @@ from typing import Optional, Dict, List
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from dotenv import load_dotenv
+from src.agent.prompts.db_agent_prompt import DB_AGENT_PROMPT
 
 load_dotenv()
 
@@ -89,12 +90,7 @@ class SimilarExamplesResult(BaseModel):
 
 agent = Agent(
 	'google-gla:gemini-3-flash-preview',
-	system_prompt=(
-		'You are a SQL assistant specialized in PostgreSQL. '
-		'You help users write, understand, debug, and optimize PostgreSQL queries. '
-		'Provide clear explanations and correct SQL syntax. '
-		'When fixing errors, explain what was wrong and why your solution works.'
-	)
+	system_prompt=DB_AGENT_PROMPT
 )
 
 # =============================================================================

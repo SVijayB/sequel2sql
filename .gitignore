@@ -1,4 +1,6 @@
 .vscode
+__pycache__
+CLAUDE.md
 
 # Environment variables
 .env
