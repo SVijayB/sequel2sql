@@ -1,8 +1,12 @@
 .vscode
 
 # Environment variables
-.env
 __pycache__/
+*.pyc
+.DS_Store
+.venv/
+env/
+.env
 
 benchmark/outputs/
 benchmark/logs/

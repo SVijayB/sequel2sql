@@ -1,0 +1,88 @@
+# Unified SQL engines for BIRD-Critic, Spider 1.0, Spider 2.0
+# Versions:
+#   - BIRD-Critic: PostgreSQL 14.12, MySQL 8.4.0, SQL Server 2022, Oracle 19c
+#   - Spider 1.0:   SQLite (file-based)
+#   - Spider 2.0:   PostgreSQL 14.12, SQLite
+#
+# Usage: see docker/README.md
+
+services:
+  postgres:
+    image: postgres:14.12
+    container_name: sequel2sql_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-root}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123123}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    command:
+      - "-c"
+      - "max_connections=300"
+      - "-c"
+      - "shared_buffers=256MB"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-root} -d ${POSTGRES_DB:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # mysql:
+  #   image: mysql:8.4.0
+  #   container_name: sequel2sql_mysql
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123123}
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   ports:
+  #     - "${MYSQL_PORT:-3306}:3306"
+  #   profiles:
+  #     - mysql
+
+  # mssql:
+  #   image: mcr.microsoft.com/mssql/server:2022-latest
+  #   container_name: sequel2sql_sqlserver
+  #   environment:
+  #     ACCEPT_EULA: "Y"
+  #     MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-Y.sa123123}"
+  #     MSSQL_PID: "Developer"
+  #   volumes:
+  #     - mssql_data:/var/opt/mssql
+  #   ports:
+  #     - "${MSSQL_PORT:-1433}:1433"
+  #   profiles:
+  #     - sqlserver
+
+  # oracle:
+  #   image: 3036197201/oracle19:latest
+  #   container_name: sequel2sql_oracle19
+  #   environment:
+  #     ORACLE_SID: ORCLCDB
+  #     ORACLE_PDB: ORCLPDB1
+  #     ORACLE_PWD: "${ORACLE_PWD:-mypassword1}"
+  #   ports:
+  #     - "${ORACLE_PORT:-1521}:1521"
+  #   volumes:
+  #     - oracle_data:/opt/oracle/oradata
+  #   profiles:
+  #     - oracle
+
+  # SQLite is file-based; mount a shared volume for .sqlite files
+  # sqlite-mount:
+  #   image: alpine:3.20
+  #   container_name: sequel2sql_sqlite_mount
+  #   command: ["sh", "-c", "tail -f /dev/null"]
+  #   volumes:
+  #     - sqlite_data:/data/sqlite
+  #   profiles:
+  #     - sqlite
+
+volumes:
+  postgres_data:
+  # mysql_data:
+  # mssql_data:
+  # oracle_data:
+  # sqlite_data:
