@@ -10,7 +10,6 @@ from collections import defaultdict
 from typing import Any, Dict, List, Set, Optional
 
 import chromadb
-from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 import sqlglot
 from pydantic import BaseModel
@@ -69,7 +68,7 @@ class FewShotExample(BaseModel):
 
     class Config:
         validate_assignment = True
-        anystr_strip_whitespace = True
+        str_strip_whitespace = True
 
 
 # ---------------------------------------------------------------------------
@@ -162,44 +161,36 @@ def select_diverse_examples_from_chroma_results(
     selected: List[Dict[str, Any]] = []
 
     # Step 1: Dynamic Stratification by complexity score
-    # We define 3 dynamic buckets based on min/max of the candidates
     if complexity_sampling:
         pool_scores = [float(c["meta"].get("complexity_score", 0.0)) for c in pool]
-        if not pool_scores:
-            min_s, max_s = 0.0, 1.0
-        else:
-            min_s, max_s = min(pool_scores), max(pool_scores)
-        
-        # Avoid division by zero if all scores are identical
+        min_s, max_s = min(pool_scores, default=0.0), max(pool_scores, default=1.0)
+
         if max_s - min_s > 1e-6:
-             range_width = (max_s - min_s) / 3.0
-             t1 = min_s + range_width
-             t2 = min_s + 2 * range_width
-             
-             buckets = {"low": [], "medium": [], "high": []}
-             for c in pool:
-                 score = float(c["meta"].get("complexity_score", 0.0))
-                 if score <= t1:
-                     buckets["low"].append(c)
-                 elif score <= t2:
-                     buckets["medium"].append(c)
-                 else:
-                     buckets["high"].append(c)
+            range_width = (max_s - min_s) / 3.0
+            t1 = min_s + range_width
+            t2 = min_s + 2 * range_width
 
-             # Select best from each bucket
-             for label in ["low", "medium", "high"]:
-                 bucket = buckets[label]
-                 if bucket:
-                     bucket.sort(key=lambda x: x["dist"])
-                     selected.append(bucket[0])
+            buckets = {"low": [], "medium": [], "high": []}
+            for c in pool:
+                score = float(c["meta"].get("complexity_score", 0.0))
+                if score <= t1:
+                    buckets["low"].append(c)
+                elif score <= t2:
+                    buckets["medium"].append(c)
+                else:
+                    buckets["high"].append(c)
 
-             if len(selected) >= max_examples:
-                 return mmr_select(selected, max_examples, diversity_lambda)
+            for label in ["low", "medium", "high"]:
+                bucket = buckets[label]
+                if bucket:
+                    bucket.sort(key=lambda x: x["dist"])
+                    selected.append(bucket[0])
+
+            if len(selected) >= max_examples:
+                return mmr_select(selected, max_examples, diversity_lambda)
 
     # Step 2: fill remaining slots via MMR
-    selected_keys = {
-        (s["doc"], s["meta"].get("sql", "")) for s in selected
-    }
+    selected_keys = {(s["doc"], s["meta"].get("sql", "")) for s in selected}
     remaining = [
         c for c in pool
         if (c["doc"], c["meta"].get("sql", "")) not in selected_keys
@@ -241,13 +232,8 @@ def find_similar_examples(
     model = SentenceTransformer(EMBEDDING_MODEL)
     query_embedding = model.encode([intent], show_progress_bar=False).tolist()
 
-    # Query ChromaDB
-    client = chromadb.Client(
-        Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=str(CHROMA_PATH),
-        )
-    )
+    # Query ChromaDB (persistent client)
+    client = chromadb.PersistentClient(path=str(CHROMA_PATH))
     collection = client.get_collection(COLLECTION_NAME)
 
     pool_size = 40
@@ -282,7 +268,7 @@ def find_similar_examples(
 
         sql_text = meta.get("sql", "").strip()
         if not sql_text:
-            continue  # skip empty SQL examples
+            continue
 
         examples.append(
             FewShotExample(

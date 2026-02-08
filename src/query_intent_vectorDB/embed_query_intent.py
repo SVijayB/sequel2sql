@@ -1,7 +1,9 @@
 import sys
 import os
-# Add src to sys.path
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+sys.path.append(
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 import json
 import logging
@@ -16,7 +18,6 @@ CHROMA_PATH = Path(__file__).parents[1] / "chroma_db"
 COLLECTION_NAME = "query_intents"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -25,12 +26,11 @@ def embed_and_store() -> None:
     logger.info("Loading embedding model...")
     model = SentenceTransformer(EMBEDDING_MODEL)
 
-    logger.info("Initializing ChromaDB...")
-    client = chromadb.Client(
-        chromadb.config.Settings(
-            persist_directory=str(CHROMA_PATH),
-            chroma_db_impl="duckdb+parquet",
-        )
+    CHROMA_PATH.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Initializing *persistent* ChromaDB...")
+    client = chromadb.PersistentClient(
+        path=str(CHROMA_PATH)
     )
 
     collection = client.get_or_create_collection(COLLECTION_NAME)
@@ -44,18 +44,21 @@ def embed_and_store() -> None:
             record = json.loads(line)
 
             documents.append(record["intent"])
-            
-            # Prepare metadata (flatten lists)
+
             meta = {k: v for k, v in record.items() if k != "intent"}
             for k, v in meta.items():
                 if isinstance(v, list):
                     meta[k] = ", ".join(map(str, v))
-            
+
             metadatas.append(meta)
             ids.append(str(idx))
 
     logger.info(f"Embedding {len(documents)} intents...")
-    embeddings = model.encode(documents, show_progress_bar=True).tolist()
+    embeddings = model.encode(
+        documents,
+        show_progress_bar=True,
+        convert_to_numpy=True,
+    ).tolist()
 
     collection.add(
         documents=documents,
@@ -64,8 +67,8 @@ def embed_and_store() -> None:
         ids=ids,
     )
 
-    client.persist()
-    logger.info("Stored embeddings successfully.")
+    logger.info(f"Final collection count: {collection.count()}")
+    logger.info("Embeddings persisted to disk successfully.")
 
 
 if __name__ == "__main__":
