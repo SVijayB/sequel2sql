@@ -14,3 +14,4 @@ benchmark/data/
 requirements.txt
 environment.yml
 CLAUDE.md
+data/
