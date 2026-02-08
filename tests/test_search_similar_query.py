@@ -41,4 +41,4 @@ if __name__ == "__main__":
 
     for i, ex in enumerate(examples, 1):
         print(f"\nExample #{i}")
-        print(ex.json(indent=2))
+        print(ex.model_dump_json(indent=2))
