@@ -37,7 +37,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error analyzing input query: {e}")
 
-    examples = find_similar_examples(test_intent, test_sql)
+    examples = find_similar_examples(test_intent )# test_sql) #removed because sql text no longer required
 
     for i, ex in enumerate(examples, 1):
         print(f"\nExample #{i}")
