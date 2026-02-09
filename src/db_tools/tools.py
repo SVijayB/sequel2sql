@@ -30,10 +30,10 @@ class ToolResult:
     source: str = "docker"  # "docker" or "local"
 
     def to_markdown(self) -> str:
-        """Format tool result as markdown.
+        """Format tool result as markdown for schema, JSON for other data.
 
         Returns:
-            Markdown formatted output
+            Markdown formatted output for schema, JSON for other data
         """
         if not self.success:
             return f"❌ Error: {self.error}"
@@ -41,12 +41,9 @@ class ToolResult:
         if isinstance(self.data, str):
             return self.data
 
-        # For dict/list data, format as markdown
-        if isinstance(self.data, dict):
-            return json.dumps(self.data, indent=2)
-
-        if isinstance(self.data, list):
-            return json.dumps(self.data, indent=2)
+        # For dict/list data, format as JSON
+        if isinstance(self.data, (dict, list)):
+            return json.dumps(self.data, indent=2, default=str)
 
         return str(self.data)
 
@@ -79,122 +76,134 @@ def get_database_schema(
     postgres_port: str = "5432",
     postgres_user: str = "root",
     postgres_password: str = "123123",
+    include_tables: bool = True,
 ) -> ToolResult:
     """
-    Get database schema in a concise, context-optimized markdown format.
+    Get database schema as a minimal join-graph JSON, returned as markdown.
 
-    Args:
-        database_name: Name of the database to describe
-        postgres_host: PostgreSQL host
-        postgres_port: PostgreSQL port
-        postgres_user: PostgreSQL username
-        postgres_password: PostgreSQL password
-
-    Returns:
-        ToolResult with schema in markdown format
+    Intended for LLM SQL fixing with reduced context:
+      - DB meta (dialect, quoting)
+      - table names (optional)
+      - FK edges (join graph)
     """
     start_time = datetime.now()
 
     try:
-        # Create connection string
-        db_uri = f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{database_name}"
+        db_uri = (
+            f"postgresql://{postgres_user}:{postgres_password}"
+            f"@{postgres_host}:{postgres_port}/{database_name}"
+        )
         engine = create_engine(db_uri)
         inspector = inspect(engine)
 
-        schema_data = {}
+        # In SQLAlchemy for Postgres, we can assume:
+        # - dialect: postgresql
+        # - identifier quoting: double quotes for delimited identifiers
+        # (If you support multiple backends later, make this dynamic.)
+        meta = {
+            "db": database_name,
+            "dialect": engine.dialect.name,  # "postgresql"
+            "identifier_quote": '"',
+        }
 
-        # Get all tables
-        tables = inspector.get_table_names()
+        # Schemas: useful when db has multiple namespaces.
+        try:
+            schemas = inspector.get_schema_names()
+        except Exception:
+            schemas = None
 
-        for table in tables:
-            columns = inspector.get_columns(table)
-            pk = inspector.get_pk_constraint(table)
-            fks = inspector.get_foreign_keys(table)
-            indexes = inspector.get_indexes(table)
+        if schemas:
+            # Filter out noisy internal schemas if you want (optional):
+            # schemas = [s for s in schemas if s not in ("pg_catalog", "information_schema")]
+            meta["schemas"] = schemas
 
-            table_info = {
-                "columns": [
-                    {
-                        "name": col["name"],
-                        "type": str(col["type"]),
-                        "nullable": col["nullable"],
-                        "primary_key": col["name"]
-                        in (pk.get("constrained_columns", [])),
-                    }
-                    for col in columns
-                ],
-                "primary_key": pk.get("constrained_columns", []),
-                "foreign_keys": [
-                    {
-                        "columns": fk.get("constrained_columns", []),
-                        "references": fk.get("referred_table"),
-                        "ref_columns": fk.get("referred_columns", []),
-                    }
-                    for fk in fks
-                ],
-                "indexes": [
-                    {
-                        "name": idx["name"],
-                        "columns": idx["column_names"],
-                        "unique": idx.get("unique", False),
-                    }
-                    for idx in indexes
-                ],
-            }
-            schema_data[table] = table_info
+        joins = []
+        tables_out = []
 
-        # Format as markdown
-        markdown = "# Database Schema\n\n"
+        # Prefer schema-qualified table enumeration if schemas exist
+        if schemas:
+            for schema in schemas:
+                try:
+                    table_names = inspector.get_table_names(schema=schema)
+                except Exception:
+                    continue
+                for table in table_names:
+                    fq_table = f"{schema}.{table}"
+                    if include_tables:
+                        tables_out.append(fq_table)
 
-        for table_name, table_info in schema_data.items():
-            markdown += f"## {table_name}\n\n"
+                    # FK edges (the key output)
+                    for fk in inspector.get_foreign_keys(table, schema=schema):
+                        child_cols = fk.get("constrained_columns") or []
+                        parent_schema = fk.get("referred_schema") or schema
+                        parent_table = fk.get("referred_table")
+                        parent_cols = fk.get("referred_columns") or []
+                        if not parent_table:
+                            continue
 
-            # Columns
-            markdown += "**Columns:**\n"
-            for col in table_info["columns"]:
-                nullable = "NULL" if col["nullable"] else "NOT NULL"
-                pk_badge = " *[PK]*" if col["primary_key"] else ""
-                markdown += f"- `{col['name']}` {col['type']} {nullable}{pk_badge}\n"
+                        joins.append(
+                            {
+                                "from": {"table": fq_table, "columns": child_cols},
+                                "to": {
+                                    "table": f"{parent_schema}.{parent_table}",
+                                    "columns": parent_cols,
+                                },
+                                "constraint": fk.get("name"),
+                            }
+                        )
+        else:
+            # No schema awareness
+            table_names = inspector.get_table_names()
+            for table in table_names:
+                if include_tables:
+                    tables_out.append(table)
+                for fk in inspector.get_foreign_keys(table):
+                    child_cols = fk.get("constrained_columns") or []
+                    parent_table = fk.get("referred_table")
+                    parent_cols = fk.get("referred_columns") or []
+                    if not parent_table:
+                        continue
+                    joins.append(
+                        {
+                            "from": {"table": table, "columns": child_cols},
+                            "to": {"table": parent_table, "columns": parent_cols},
+                            "constraint": fk.get("name"),
+                        }
+                    )
 
-            # Primary Key
-            if table_info["primary_key"]:
-                markdown += (
-                    f"\n**Primary Key:** {', '.join(table_info['primary_key'])}\n"
-                )
+        # Deduplicate joins (some DBs can return duplicates depending on reflection)
+        seen = set()
+        uniq = []
+        for j in joins:
+            key = (
+                j["from"]["table"],
+                tuple(j["from"]["columns"]),
+                j["to"]["table"],
+                tuple(j["to"]["columns"]),
+                j.get("constraint"),
+            )
+            if key not in seen:
+                seen.add(key)
+                uniq.append(j)
+        joins = uniq
 
-            # Foreign Keys
-            if table_info["foreign_keys"]:
-                markdown += "\n**Foreign Keys:**\n"
-                for fk in table_info["foreign_keys"]:
-                    cols = ", ".join(fk["columns"])
-                    ref_cols = ", ".join(fk["ref_columns"])
-                    markdown += f"- `{cols}` → `{fk['references']}({ref_cols})`\n"
+        payload = {
+            "meta": meta,
+            "tables": tables_out if include_tables else [],
+            "joins": joins,
+        }
 
-            # Indexes
-            if table_info["indexes"]:
-                markdown += "\n**Indexes:**\n"
-                for idx in table_info["indexes"]:
-                    unique_badge = " [UNIQUE]" if idx["unique"] else ""
-                    markdown += f"- `{idx['name']}` on {', '.join(idx['columns'])}{unique_badge}\n"
-
-            markdown += "\n"
+        markdown = "```json\n" + json.dumps(payload, indent=2, default=str) + "\n```"
 
         duration = datetime.now() - start_time
         return ToolResult(
-            success=True,
-            data=markdown,
-            duration=duration,
-            source="direct",
+            success=True, data=markdown, duration=duration, source="direct"
         )
 
     except Exception as e:
         duration = datetime.now() - start_time
         return ToolResult(
-            success=False,
-            data=None,
-            error=str(e),
-            duration=duration,
-            source="direct",
+            success=False, data=None, error=str(e), duration=duration, source="direct"
         )
 
 
@@ -288,7 +297,7 @@ def get_sample_rows(
         postgres_password: PostgreSQL password
 
     Returns:
-        ToolResult with sample rows in markdown table format
+        ToolResult with sample rows in JSON format
     """
     start_time = datetime.now()
 
@@ -308,23 +317,19 @@ def get_sample_rows(
             columns = result.keys()
             rows = result.fetchall()
 
-        # Format as markdown table
-        markdown = f"# Sample Rows from {table_name}\n\n"
-
+        # Format as JSON list of objects
+        json_data = []
         if rows:
-            markdown += "| " + " | ".join(columns) + " |\n"
-            markdown += "|" + "|".join(["---"] * len(columns)) + "|\n"
-
             for row in rows:
-                values = [str(val) if val is not None else "" for val in row]
-                markdown += "| " + " | ".join(values) + " |\n"
-        else:
-            markdown += "No rows found in table."
+                row_dict = {}
+                for i, col in enumerate(columns):
+                    row_dict[col] = row[i]
+                json_data.append(row_dict)
 
         duration = datetime.now() - start_time
         return ToolResult(
             success=True,
-            data=markdown,
+            data=json_data,
             duration=duration,
             source="direct",
         )
@@ -360,7 +365,7 @@ def execute_query(
         postgres_password: PostgreSQL password
 
     Returns:
-        ToolResult with query results in markdown table format
+        ToolResult with query results in JSON format
     """
     start_time = datetime.now()
 
@@ -377,23 +382,19 @@ def execute_query(
             columns = result.keys()
             rows = result.fetchall()
 
-        # Format as markdown table
-        markdown = "# Query Results\n\n"
-
+        # Format as JSON list of objects
+        json_data = []
         if rows:
-            markdown += "| " + " | ".join(columns) + " |\n"
-            markdown += "|" + "|".join(["---"] * len(columns)) + "|\n"
-
             for row in rows:
-                values = [str(val) if val is not None else "" for val in row]
-                markdown += "| " + " | ".join(values) + " |\n"
-        else:
-            markdown += "No results returned."
+                row_dict = {}
+                for i, col in enumerate(columns):
+                    row_dict[col] = row[i]
+                json_data.append(row_dict)
 
         duration = datetime.now() - start_time
         return ToolResult(
             success=True,
-            data=markdown,
+            data=json_data,
             duration=duration,
             source="direct",
         )
