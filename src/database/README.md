@@ -198,84 +198,6 @@ deps = AgentDeps(
 
 The `execute_sql` tool calculates max rows as: `5 + max_return_values / num_columns`
 
-## Design Decisions
-
-### Why This Architecture?
-
-1. **Database Class vs Functions**: Enables state tracking (`last_query`), one-time engine initialization, cleaner API
-2. **Readable Text Schema**: Better LLM comprehension than JSON, includes all schema elements
-3. **Dependency Injection**: Cleaner agent code, easier testing, follows proven patterns
-4. **Markdown Tables**: Native format for LLMs, more readable than JSON wrappers
-5. **No Redundant Functions**: Everything achievable via SQL - simpler mental model
-
-### Changes from Original db_tools
-
-- **Removed**: `get_table_columns()` - use `SELECT * FROM table LIMIT 0`
-- **Removed**: `get_sample_rows()` - use `SELECT * FROM table LIMIT N`
-- **Removed**: Complex JSON join-graph schema - use readable text format
-- **Removed**: `_execute_in_docker()` - deprecated approach
-- **Consolidated**: 438 lines → ~200 lines total across 5 focused files
-- **Improved**: Engine created once vs per-call (major performance gain)
-
-## Comparison with dbdex
-
-This module is inspired by [dbdex](https://github.com/Finndersen/dbdex) but simplified for PostgreSQL-only usage:
-
-### Similarities
-- Database class with engine/metadata management
-- QueryResult with to_markdown() and to_csv()
-- Agent tools with dependency injection
-- SELECT-only query validation
-
-### Differences
-- **PostgreSQL-only** (dbdex supports multiple databases)
-- **Simpler schema format** (text DDL vs dbdex's detailed format)
-- **No CLI tools** (focused on agent integration)
-- **Fewer abstractions** (streamlined for specific use case)
-
-## Testing
-
-Run the test suite:
-```bash
-# Start PostgreSQL
-docker compose -f benchmark/docker-compose.yml up -d postgresql
-
-# Run tests
-python test_database.py
-
-# Run examples
-python examples_database.py
-```
-
-## Error Handling
-
-The module raises clear exceptions:
-
-```python
-from database import Database, InvalidQueryError, TableNotFoundError
-
-db = Database("my_database")
-
-# InvalidQueryError for non-SELECT queries
-try:
-    db.execute_sql("DELETE FROM users")
-except InvalidQueryError as e:
-    print(f"Only SELECT allowed: {e}")
-
-# TableNotFoundError for invalid tables
-try:
-    schema = db.describe_schema(["nonexistent_table"])
-except TableNotFoundError as e:
-    print(f"Table not found: {e}")
-
-# SQL errors preserved in QueryResult
-try:
-    result = db.execute_sql("SELECT * FROM invalid_syntax")
-except Exception as e:
-    # Error stored in db.last_query.error
-    print(f"SQL error: {e}")
-```
-
 ## API Reference
 
 ### Database
@@ -336,18 +258,7 @@ def execute_sql(ctx: RunContext[AgentDeps], sql: str) -> DBQueryResponse:
     """Execute SELECT query with result limiting."""
 ```
 
-## Contributing
-
-When modifying this module:
-
-1. Keep it PostgreSQL-focused (don't add multi-DB support)
-2. Maintain the clean separation of concerns
-3. Ensure markdown output is LLM-friendly
-4. Update tests when adding features
-5. Follow the dbdex pattern for consistency
-
 ## Credits
 
 - Inspired by [dbdex](https://github.com/Finndersen/dbdex) by Finndersen
 - Built with SQLAlchemy and Pydantic AI
-- Part of the Sequel2SQL project
