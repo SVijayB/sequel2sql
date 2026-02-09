@@ -1,21 +1,23 @@
-import sys
 import os
+import sys
+
 # Add src to sys.path
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 import logging
 import math
-from pathlib import Path
 from collections import defaultdict
-from typing import Any, Dict, List, Set, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
 
 import chromadb
-from sentence_transformers import SentenceTransformer
 import sqlglot
 from pydantic import BaseModel
+from sentence_transformers import SentenceTransformer
 
 from ast_parsers.query_analyzer import analyze_query
-
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -44,6 +46,7 @@ logging.getLogger("tokenizers").setLevel(logging.WARNING)
 # ---------------------------------------------------------------------------
 # Pydantic model returned to callers
 # ---------------------------------------------------------------------------
+
 
 class FewShotExample(BaseModel):
     """
@@ -74,6 +77,7 @@ class FewShotExample(BaseModel):
 # ---------------------------------------------------------------------------
 # Helper functions for diversity selection
 # ---------------------------------------------------------------------------
+
 
 def parse_signature(sig: Any) -> Set[str]:
     """Parse pattern signature string into a set of components."""
@@ -153,8 +157,7 @@ def select_diverse_examples_from_chroma_results(
     dists = results["distances"][0]
 
     candidates = [
-        {"doc": d, "meta": m, "dist": dist}
-        for d, m, dist in zip(docs, metas, dists)
+        {"doc": d, "meta": m, "dist": dist} for d, m, dist in zip(docs, metas, dists)
     ]
 
     pool = candidates[:candidate_pool_size]
@@ -192,8 +195,7 @@ def select_diverse_examples_from_chroma_results(
     # Step 2: fill remaining slots via MMR
     selected_keys = {(s["doc"], s["meta"].get("sql", "")) for s in selected}
     remaining = [
-        c for c in pool
-        if (c["doc"], c["meta"].get("sql", "")) not in selected_keys
+        c for c in pool if (c["doc"], c["meta"].get("sql", "")) not in selected_keys
     ]
 
     selected.extend(
@@ -210,6 +212,7 @@ def select_diverse_examples_from_chroma_results(
 # ---------------------------------------------------------------------------
 # Main retrieval function
 # ---------------------------------------------------------------------------
+
 
 def find_similar_examples(
     intent: str,
