@@ -106,12 +106,10 @@ def show_main_menu() -> Dict[str, Any]:
     choice = questionary.select(
         "What would you like to do?",
         choices=[
-            questionary.Choice(
-                "🚀 Start a complete run (531 queries)", value="complete"
-            ),
-            questionary.Choice("🧪 Start a run on a subset of queries", value="subset"),
-            questionary.Choice("📊 View previous runs", value="previous"),
-            questionary.Choice("❌ Exit", value="exit"),
+            questionary.Choice("Start a complete run (531 queries)", value="complete"),
+            questionary.Choice("Start a run on a subset of queries", value="subset"),
+            questionary.Choice("View previous runs", value="previous"),
+            questionary.Choice("Exit", value="exit"),
         ],
     ).ask()
 
