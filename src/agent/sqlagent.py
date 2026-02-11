@@ -9,10 +9,12 @@ from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 
-from src.agent.prompts.db_agent_prompt import DB_AGENT_PROMPT
-from src.database import AgentDeps, Database, execute_sql
+from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT
+from src.agent.prompts.webui_prompt import WEBUI_PROMPT
+from src.database import AgentDeps, Database, DBQueryResponse
+from src.database import execute_sql as _execute_sql
 
 load_dotenv()
 
@@ -133,19 +135,40 @@ class SimilarExamplesResult(BaseModel):
 
 
 # =============================================================================
-# Agent Definition
+# Agent Definitions
 # =============================================================================
 
+# Default agent
 agent = Agent(
     "google-gla:gemini-3-flash-preview",
     deps_type=AgentDeps,
-    system_prompt=DB_AGENT_PROMPT,
-    tools=[execute_sql],
+    system_prompt=BENCHMARK_PROMPT,
+)
+
+# Web UI agen
+webui_agent = Agent(
+    "google-gla:gemini-3-flash-preview",
+    deps_type=AgentDeps,
+    system_prompt=WEBUI_PROMPT,
 )
 
 # =============================================================================
 # Tool Definitions
 # =============================================================================
+
+
+@agent.tool
+def execute_sql_query(ctx: RunContext[AgentDeps], sql: str) -> DBQueryResponse:
+    """Execute the given SQL SELECT query on the connected database and return the result.
+
+    Args:
+        ctx: Run context containing database connection and configuration
+        sql: SQL SELECT query to execute
+
+    Returns:
+        DBQueryResponse with columns, rows, and optional truncation note
+    """
+    return _execute_sql(ctx, sql)
 
 
 @agent.tool_plain
@@ -176,3 +199,9 @@ def find_similar_examples(input: FindSimilarInput) -> SimilarExamplesResult:
     Returns top-k similar examples with their metadata and similarity scores.
     """
     raise NotImplementedError("RAG retrieval not yet implemented")
+
+
+# Register the same tools on the webui agent
+webui_agent.tool(name="execute_sql_query")(execute_sql_query)
+webui_agent.tool_plain(name="validate_query")(validate_query)
+webui_agent.tool_plain(name="find_similar_examples")(find_similar_examples)

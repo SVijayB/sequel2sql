@@ -20,7 +20,7 @@ import sys
 
 from dotenv import load_dotenv
 
-from src.agent.sqlagent import agent, get_database_deps
+from src.agent.sqlagent import get_database_deps, webui_agent
 
 # Load environment variables
 load_dotenv()
@@ -56,13 +56,9 @@ except Exception as e:
 # Web Application
 # =============================================================================
 
-app = agent.to_web(deps=deps)
+app = webui_agent.to_web(deps=deps)
 
 if __name__ == "__main__":
     import uvicorn
-
-    print(f"\nOpen http://localhost:8000 in your browser")
-    print(f"Connected database: {DATABASE_NAME}")
-    print(f"Press Ctrl+C to stop\n")
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
