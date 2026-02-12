@@ -7,6 +7,7 @@ This is the foundational agent before adding RAG and AST components.
 
 from typing import Dict, List, Optional
 
+import logfire
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
@@ -18,12 +19,8 @@ from src.database import execute_sql as _execute_sql
 
 load_dotenv()
 
-# Optional: Configure LogFire for monitoring and debugging
-# Uncomment the lines below after running: uv run logfire auth
-# import logfire
-# logfire.configure()
-# logfire.instrument_pydantic_ai()
-
+logfire.configure()
+logfire.instrument_pydantic_ai()
 
 # =============================================================================
 # Helper Functions
