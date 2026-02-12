@@ -31,6 +31,7 @@ dependencies = [
     "sqlglot>=20.0.0",
     "sentence-transformers>=2.2.2",
     "chromadb>=1.4.1",
+    "sqlalchemy>=2.0.46",
 ]
 
 [project.optional-dependencies]
