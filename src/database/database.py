@@ -166,6 +166,8 @@ class Database:
                 sql_result = conn.execute(text(sql_query))
                 if sql_result.returns_rows:
                     rows = list(sql_result)
+                    if len(rows) > 100:
+                        rows = rows[:100]
             except Exception as e:
                 # When an error occurs, details are stored in last_query, but
                 # exception is re-raised
