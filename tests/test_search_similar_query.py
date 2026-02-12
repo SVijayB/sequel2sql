@@ -1,12 +1,15 @@
-import sys
 import os
+import sys
 
 # Add src to sys.path
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+sys.path.append(
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src")
+)
 
 import sqlglot
+
 from ast_parsers.query_analyzer import analyze_query
-from query_intent_vectorDB.search_similar_query import find_similar_examples
+from query_intent_vectordb.search_similar_query import find_similar_examples
 
 if __name__ == "__main__":
     test_intent = (
@@ -23,7 +26,7 @@ if __name__ == "__main__":
     )
 
     print(f"Searching for similar examples for intent: {test_intent}")
-    
+
     # Analyze input query
     try:
         ast = sqlglot.parse_one(test_sql, read="postgres")

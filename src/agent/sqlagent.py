@@ -14,31 +14,70 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-from typing import Optional, List
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent
+from typing import List, Optional
+
+import logfire
 from dotenv import load_dotenv
-from src.agent.prompts.db_agent_prompt import DB_AGENT_PROMPT
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
+
+from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT
+from src.agent.prompts.webui_prompt import WEBUI_PROMPT
 from src.ast_parsers.llm_tool import validate_sql
 from src.ast_parsers.models import ValidationErrorOut
 from src.query_intent_vectorDB.search_similar_query import (
 	find_similar_examples,
 	FewShotExample,
 )
+from src.database import AgentDeps, Database, DBQueryResponse
+from src.database import execute_sql as _execute_sql
 
 load_dotenv()
 
 
-# Optional: Configure LogFire for monitoring and debugging
-# Uncomment the lines below after running: uv run logfire auth
-# import logfire
-# logfire.configure()
-# logfire.instrument_pydantic_ai()
+logfire.configure()
+logfire.instrument_pydantic_ai()
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+
+def get_database_deps(
+    database_name: str,
+    host: str = "localhost",
+    port: int = 5432,
+    user: str = "root",
+    password: str = "123123",
+    max_return_values: int = 200,
+) -> AgentDeps:
+    """Create AgentDeps with a Database instance for the specified database.
+
+    Args:
+            database_name: Name of the PostgreSQL database to connect to
+            host: PostgreSQL host (default: localhost)
+            port: PostgreSQL port (default: 5432)
+            user: PostgreSQL username (default: root)
+            password: PostgreSQL password (default: 123123)
+            max_return_values: Maximum number of result values to return (default: 200)
+
+    Returns:
+            AgentDeps instance ready to be passed to the agent
+    """
+    database = Database(
+        database_name=database_name,
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+    )
+    return AgentDeps(database=database, max_return_values=max_return_values)
 
 
 # =============================================================================
 # Pydantic Models
 # =============================================================================
+
 
 class BenchmarkInputForAgent(BaseModel):
 	"""Unified input representing a benchmark query for the agent."""
@@ -49,10 +88,11 @@ class BenchmarkInputForAgent(BaseModel):
 
 
 class ValidateQueryToolInput(BaseModel):
-	"""Input for the SQL validation tool."""
-	sql: str
-	db_id: Optional[str] = None
-	dialect: str = "postgres"
+    """Input for the SQL validation tool."""
+
+    sql: str
+    db_id: Optional[str] = None
+    dialect: str = "postgres"
 
 
 class FewShotExamplesResult(BaseModel):
@@ -75,13 +115,21 @@ class AgentResponse(BaseModel):
 
 
 # =============================================================================
-# Agent Definitions
+# Agent Definition
 # =============================================================================
 
+# Default agent
 agent = Agent(
-	'google-gla:gemini-3-flash-preview',
-	system_prompt=DB_AGENT_PROMPT,
-	output_type=AgentResponse
+    "google-gla:gemini-3-flash-preview",
+    deps_type=AgentDeps,
+    system_prompt=BENCHMARK_PROMPT,
+)
+
+# Web UI agen
+webui_agent = Agent(
+    "google-gla:gemini-3-flash-preview",
+    deps_type=AgentDeps,
+    system_prompt=WEBUI_PROMPT,
 )
 
 SYNTAX_FIXER_PROMPT = (
@@ -99,9 +147,25 @@ syntax_fixer_agent = Agent(
 )
 
 
+
 # =============================================================================
 # Tool Definitions (kept for future use as agent tools)
 # =============================================================================
+
+
+@agent.tool
+def execute_sql_query(ctx: RunContext[AgentDeps], sql: str) -> DBQueryResponse:
+    """Execute the given SQL SELECT query on the connected database and return the result.
+
+    Args:
+        ctx: Run context containing database connection and configuration
+        sql: SQL SELECT query to execute
+
+    Returns:
+        DBQueryResponse with columns, rows, and optional truncation note
+    """
+    return _execute_sql(ctx, sql)
+
 
 @agent.tool_plain
 def validate_query(input: ValidateQueryToolInput) -> List[ValidationErrorOut]:
@@ -110,17 +174,16 @@ def validate_query(input: ValidateQueryToolInput) -> List[ValidationErrorOut]:
 
 	Use this tool to:
 	- Check if a SQL query has valid PostgreSQL syntax
-	- Detect schema errors like non-existent tables/columns (if db_id provided)
-	- Get structured error details with canonical tags
+	- Detect schema errors like non-existent tables/columns (if schema provided)
+	- Get metadata about query structure
 
-	Returns a list of validation errors. Empty list means valid SQL.
+	Returns validation status, any errors found, and structural metadata.
 	"""
 	return validate_sql(
 		input.sql,
 		db_name=input.db_id,
 		dialect=input.dialect,
 	)
-
 
 @agent.tool_plain
 def similar_examples_tool(
@@ -131,10 +194,10 @@ def similar_examples_tool(
 	Find similar SQL query examples from the training database
 	using semantic search.
 
-	Use this tool to:
-	- Find examples of similar queries that were previously corrected
-	- Get context for how similar errors were fixed
-	- Retrieve queries with similar intent/structure
+    Use this tool to:
+    - Find examples of similar queries that were previously corrected
+    - Get context for how similar errors were fixed
+    - Retrieve queries with similar intent/structure
 
 	Returns structurally diverse few-shot examples with metadata.
 	"""
@@ -143,6 +206,10 @@ def similar_examples_tool(
 		examples=examples,
 		query_intent=query,
 	)
+
+webui_agent.tool(name="execute_sql_query")(execute_sql_query)
+webui_agent.tool_plain(name="validate_query")(validate_query)
+webui_agent.tool_plain(name="find_similar_examples")(similar_examples_tool)
 
 
 # =============================================================================
