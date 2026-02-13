@@ -16,7 +16,7 @@ sys.path.insert(0, str(project_root / "src"))
 
 from typing import List, Optional
 
-import logfire
+# import logfire  # Commented out - optional dependency
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
@@ -35,8 +35,9 @@ from src.database import execute_sql as _execute_sql
 load_dotenv()
 
 
-logfire.configure()
-logfire.instrument_pydantic_ai()
+# Logfire configuration (optional - uncomment if you have logfire auth set up)
+# logfire.configure()
+# logfire.instrument_pydantic_ai()
 
 # =============================================================================
 # Helper Functions
@@ -72,6 +73,31 @@ def get_database_deps(
         password=password,
     )
     return AgentDeps(database=database, max_return_values=max_return_values)
+
+
+def _extract_table_names(sql: str, dialect: str) -> set[str]:
+	"""
+	Best-effort extraction of table names from SQL query using sqlglot.
+
+	Returns empty set if parsing fails.
+	"""
+	try:
+		import sqlglot
+		from sqlglot.optimizer.scope import build_scope
+
+		# Parse SQL
+		parsed = sqlglot.parse_one(sql, dialect=dialect)
+
+		# Extract table names using scope analysis
+		tables = set()
+		for scope in build_scope(parsed).traverse():
+			for table in scope.tables:
+				tables.add(table)
+
+		return tables
+	except Exception:
+		# If parsing fails, return empty set
+		return set()
 
 
 # =============================================================================
@@ -114,6 +140,26 @@ class AgentResponse(BaseModel):
 	explanation: str = Field(..., description="Explanation of what was fixed and why")
 
 
+class SQLAnalysisContext(BaseModel):
+	"""Comprehensive context for SQL query fixing (webui_agent tool)."""
+
+	# Schema information
+	database_id: str
+	available_tables: List[str]
+	schema_description: str  # DDL-like formatted schema
+
+	# Validation results
+	has_errors: bool
+	validation_errors: List[dict]  # [{tag: "SYNTAX_ERROR", message: "..."}]
+
+	# Few-shot examples
+	similar_examples: List[dict]  # [{sql: "...", intent: "...", explanation: "..."}]
+
+	# Metadata
+	query_intent: str
+	dialect: str
+
+
 # =============================================================================
 # Agent Definition
 # =============================================================================
@@ -145,7 +191,6 @@ syntax_fixer_agent = Agent(
 	system_prompt=SYNTAX_FIXER_PROMPT,
 	output_type=str,
 )
-
 
 
 # =============================================================================
@@ -207,96 +252,116 @@ def similar_examples_tool(
 		query_intent=query,
 	)
 
+
+@webui_agent.tool
+async def analyze_and_fix_sql(
+	ctx: RunContext[AgentDeps],
+	issue_sql: str,
+	query_intent: str,
+	db_id: str,
+	dialect: str = "postgres",
+	include_all_tables: bool = False
+) -> SQLAnalysisContext:
+	"""
+	Comprehensive SQL query analysis and context gathering for fixing.
+
+	This tool orchestrates multiple analysis steps to provide complete context
+	for fixing SQL queries:
+
+	1. Schema Discovery - Get database schema (all tables or only referenced ones)
+	2. Validation - Check for syntax and schema errors
+	3. Semantic Search - Find similar query examples from training data
+
+	After calling this tool, use the returned context to:
+	- Understand what tables/columns are available
+	- See what errors exist in the query
+	- Learn from similar query examples
+	- Optionally call execute_sql_query to sample rows from tables
+	- Produce a corrected SQL query with explanation
+
+	Args:
+		issue_sql: The SQL query to analyze and fix
+		query_intent: Natural language description of what the query should do
+		db_id: Database identifier (must match ctx.deps.database.database_name)
+		dialect: SQL dialect (default: postgres)
+		include_all_tables: Whether to include all tables in schema (default: False)
+
+	Returns:
+		SQLAnalysisContext with schema, validation errors, and similar examples
+	"""
+
+	# Step 1: Get schema information
+	database = ctx.deps.database
+
+	if include_all_tables:
+		# Include all tables
+		schema_description = database.describe_schema()
+		available_tables = database.table_names
+	else:
+		# Try to extract referenced tables from the query
+		# This is best-effort - if parsing fails, fall back to all tables
+		try:
+			referenced_tables = _extract_table_names(issue_sql, dialect)
+			if referenced_tables:
+				schema_description = database.describe_schema(list(referenced_tables))
+				available_tables = list(referenced_tables)
+			else:
+				# No tables found, include all
+				schema_description = database.describe_schema()
+				available_tables = database.table_names
+		except Exception:
+			# Parsing failed, include all tables
+			schema_description = database.describe_schema()
+			available_tables = database.table_names
+
+	# Step 2: Validate SQL query
+	validation_errors = validate_sql(issue_sql, db_name=db_id, dialect=dialect)
+
+	# Step 3: Get similar examples
+	examples = find_similar_examples(query_intent, n_results=6)
+
+	# Format similar examples
+	similar_examples_formatted = [
+		{
+			"sql": ex.sql,
+			"intent": ex.intent,
+			"complexity_score": ex.complexity_score,
+			"pattern_signature": ex.pattern_signature
+		}
+		for ex in examples
+	]
+
+	return SQLAnalysisContext(
+		database_id=db_id,
+		available_tables=available_tables,
+		schema_description=schema_description,
+		has_errors=(len(validation_errors) > 0),
+		validation_errors=[
+			{"tag": err.tag, "message": err.message}
+			for err in validation_errors
+		],
+		similar_examples=similar_examples_formatted,
+		query_intent=query_intent,
+		dialect=dialect,
+	)
+
+
 webui_agent.tool(name="execute_sql_query")(execute_sql_query)
 webui_agent.tool_plain(name="validate_query")(validate_query)
 webui_agent.tool_plain(name="find_similar_examples")(similar_examples_tool)
 
 
 # =============================================================================
-# Orchestration Pipeline
+# Note: Pipeline orchestration has been moved
 # =============================================================================
-
-async def run_pipeline(
-	input: BenchmarkInputForAgent,
-) -> AgentPipelineResult:
-	"""Deterministic pipeline: validate → fix syntax once → retrieve examples → LLM."""
-
-	current_sql = input.issue_sql
-
-	# Step 1: Validate syntax
-	errors = validate_sql(
-		current_sql, db_name=input.db_id, dialect=input.dialect
-	)
-
-	# Step 2: Attempt syntax fix once (don't fail if it doesn't work)
-	if errors:
-		error_details = "\n".join(
-			f"- [{e.tag}] {e.message}" for e in errors
-		)
-		fix_prompt = (
-			f"Fix the syntax errors in this PostgreSQL query.\n\n"
-			f"SQL:\n{current_sql}\n\n"
-			f"Errors:\n{error_details}"
-		)
-
-		fix_result = await syntax_fixer_agent.run(fix_prompt)
-		current_sql = fix_result.output.strip()
-
-		# Re-validate after fix
-		errors = validate_sql(
-			current_sql, db_name=input.db_id, #dialect=input.dialect # need to match this to 'postgres'
-		)
-
-		# Print error summary if still has errors, but continue anyway
-		if errors:
-			error_summary = "; ".join(e.message for e in errors)
-			print(f"Note: Syntax fixer couldn't resolve all errors: {error_summary}")
-			print("Continuing to main agent with RAG context...")
-
-	# Step 3: Retrieve few-shot examples
-	examples = find_similar_examples(input.query)
-
-	examples_text = "\n\n".join(
-		f"Example {i + 1}:\n"
-		f"  Intent: {ex.intent}\n"
-		f"  SQL: {ex.sql}"
-		for i, ex in enumerate(examples)
-	)
-
-	# Step 4: Final LLM call
-	user_prompt = (
-		f"Fix and optimize the following PostgreSQL query.\n\n"
-		f"Intent: {input.query}\n\n"
-		f"SQL Query:\n{current_sql}\n\n"
-		f"Similar examples for reference:\n{examples_text}"
-	)
-
-	result = await agent.run(user_prompt)
-
-	return AgentPipelineResult(
-		corrected_sql=result.output.corrected_sql,
-		explanation=result.output.explanation,
-		success=True,
-	)
-
-
-if __name__ == "__main__":
-	import asyncio
-	import json
-	from pathlib import Path
-
-	test_file = Path(__file__).parent / "test_cases.json"
-	with open(test_file) as f:
-		tc = json.load(f)
-
-	test_input = BenchmarkInputForAgent(
-		issue_sql=tc["issue_sql"][0],
-		db_id=tc["db_id"],
-		query=tc["query"],
-		dialect=tc["dialect"].lower(),
-	)
-
-	result = asyncio.run(run_pipeline(test_input))
-	print(f"Success: {result.success}")
-	print(f"Corrected SQL: {result.corrected_sql}")
-	print(f"Explanation: {result.explanation}")
+#
+# The run_pipeline() function has been moved to:
+#   benchmark/agent/pipeline.py
+#
+# The benchmark runner has been moved to:
+#   benchmark/agent/agent_benchmark.py
+#
+# For batch processing of SQL queries, use:
+#   python -m benchmark.agent.agent_benchmark --limit 20
+#
+# =============================================================================
