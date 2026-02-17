@@ -53,15 +53,6 @@ Sequel2SQL uses retrieval-augmented generation and agent-based workflows by leve
     <img src="assets/flowchart.jpg" alt="Product Screenshot">
 </p>
 
-## Docker Setup
-
-A Docker Compose stack provides SQL engine versions used by **BIRD-Critic**, **Spider 1.0/2.0**, with support for **PostgreSQL 14.12**, **MySQL 8.4.0**, **Oracle 19c**, and **SQL Server 2022**.
-
-```bash
-docker compose -f docker/docker-compose.yml up -d postgres
-```
-
-See **[docker/README.md](docker/README.md)** for detailed engine versions, connection strings, and usage instructions.
 
 ## Installation
 
