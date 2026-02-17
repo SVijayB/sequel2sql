@@ -20,7 +20,7 @@ import logfire
 import sqlglot
 from sqlglot import exp
 from dotenv import load_dotenv
-from pydantic import BaseModel #, Field #removed field since model doesnt use now, uncomment when models use it
+from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
 from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT
@@ -29,7 +29,7 @@ from src.ast_parsers.llm_tool import validate_sql
 from src.ast_parsers.models import ValidationErrorOut
 from src.database import AgentDeps, Database, DBQueryResponse
 from src.database import execute_sql as _execute_sql
-from src.query_intent_vectordb.search_similar_query import (
+from src.query_intent_vectorDB.search_similar_query import (
     FewShotExample,
     find_similar_examples,
 )
@@ -137,6 +137,14 @@ class FewShotExamplesResult(BaseModel):
 
 #     corrected_sql: str = Field(..., description="The corrected/optimized SQL query")
 #     explanation: str = Field(..., description="Explanation of what was fixed and why")
+
+
+class SchemaDescription(BaseModel):
+    """Database schema information returned by describe_database_schema tool."""
+
+    database_id: str
+    available_tables: list[str]
+    schema_description: str
 
 
 class SQLAnalysisContext(BaseModel):
@@ -339,10 +347,37 @@ async def analyze_and_fix_sql(
     )
 
 
+@agent.tool
+def describe_database_schema(
+    ctx: RunContext[AgentDeps],
+    table_names: list[str] | None = None,
+) -> SchemaDescription:
+    """Get the database schema description. Use this to discover
+    available tables and their columns, types, and constraints.
+
+    Call with no arguments to list all tables and their full schemas.
+    Call with specific table_names to get schema for only those tables.
+
+    Args:
+        ctx: Run context containing database connection
+        table_names: Optional list of specific table names to describe
+
+    Returns:
+        SchemaDescription with table list and DDL-like schema text
+    """
+    database = ctx.deps.database
+    return SchemaDescription(
+        database_id=database.database_name,
+        available_tables=database.table_names,
+        schema_description=database.describe_schema(table_names),
+    )
+
+
 webui_agent.tool(name="execute_sql_query")(execute_sql_query)
 webui_agent.tool_plain(name="validate_query")(validate_query)
 webui_agent.tool_plain(name="find_similar_examples")(similar_examples_tool)
 webui_agent.tool(name="analyze_and_fix_sql")(analyze_and_fix_sql)
+webui_agent.tool(name="describe_database_schema")(describe_database_schema)
 
 
 # =============================================================================
