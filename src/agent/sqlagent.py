@@ -8,12 +8,6 @@ errors, retrieves few-shot examples, and calls the main agent.
 
 import sys
 from pathlib import Path
-
-# Add both project root and src/ to sys.path for imports to work
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-sys.path.insert(0, str(project_root / "src"))
-
 from typing import List, Optional
 
 import logfire
@@ -23,13 +17,19 @@ from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 from sqlglot import exp
 
-from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT
-from src.agent.prompts.webui_prompt import WEBUI_PROMPT
-from src.ast_parsers.llm_tool import validate_sql
-from src.ast_parsers.models import ValidationErrorOut
-from src.database import AgentDeps, Database, DBQueryResponse
-from src.database import execute_sql as _execute_sql
-from src.query_intent_vectordb.search_similar_query import (
+# Add both project root and src/ to sys.path for imports to work
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "src"))
+
+# noqa: E402 - Ignore import order since we need to set up sys.path first
+from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT  # noqa: E402
+from src.agent.prompts.webui_prompt import WEBUI_PROMPT  # noqa: E402
+from src.ast_parsers.llm_tool import validate_sql  # noqa: E402
+from src.ast_parsers.models import ValidationErrorOut  # noqa: E402
+from src.database import AgentDeps, Database, DBQueryResponse  # noqa: E402
+from src.database import execute_sql as _execute_sql  # noqa: E402
+from src.query_intent_vectordb.search_similar_query import (  # noqa: E402
     FewShotExample,
     find_similar_examples,
 )
