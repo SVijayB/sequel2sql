@@ -37,8 +37,8 @@ from src.query_intent_vectordb.search_similar_query import (  # noqa: E402
 load_dotenv()
 
 
-# Logfire configuration (optional - uncomment if you have logfire auth set up)
-logfire.configure()
+# Logfire configuration (make sure to set LOGFIRE_TOKEN in .env for logging to work)
+logfire.configure(send_to_logfire="if-token-present")
 logfire.instrument_pydantic_ai()
 
 # =============================================================================
