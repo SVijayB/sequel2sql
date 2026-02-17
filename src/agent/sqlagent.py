@@ -6,7 +6,6 @@ Deterministic orchestration pipeline that validates SQL, fixes syntax
 errors, retrieves few-shot examples, and calls the main agent.
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -18,8 +17,10 @@ sys.path.insert(0, str(project_root / "src"))
 from typing import List, Optional
 
 import logfire
+import sqlglot
+from sqlglot import exp
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel #, Field #removed field since model doesnt use now, uncomment when models use it
 from pydantic_ai import Agent, RunContext
 
 from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT
@@ -83,21 +84,13 @@ def _extract_table_names(sql: str, dialect: str) -> set[str]:
     Returns empty set if parsing fails.
     """
     try:
-        import sqlglot
-        from sqlglot.optimizer.scope import build_scope
-
-        # Parse SQL
         parsed = sqlglot.parse_one(sql, dialect=dialect)
-
-        # Extract table names using scope analysis
         tables = set()
-        for scope in build_scope(parsed).traverse():
-            for table in scope.tables:
-                tables.add(table)
-
+        for table in parsed.find_all(exp.Table):
+            if table.name:
+                tables.add(table.name)
         return tables
     except Exception:
-        # If parsing fails, return empty set
         return set()
 
 
@@ -129,20 +122,21 @@ class FewShotExamplesResult(BaseModel):
     examples: List[FewShotExample]
     query_intent: str
 
+# BELOW MODELS FOR FUTURE USE ONCE WE ADD AGENT PIPELINE, NOT USED NOW
 
-class AgentPipelineResult(BaseModel):
-    """Output of the full orchestration pipeline."""
+# class AgentPipelineResult(BaseModel):
+#     """Output of the full orchestration pipeline."""
 
-    corrected_sql: str = ""
-    explanation: str = ""
-    success: bool = False
+#     corrected_sql: str = ""
+#     explanation: str = ""
+#     success: bool = False
 
 
-class AgentResponse(BaseModel):
-    """Structured response from the main SQL fixing agent."""
+# class AgentResponse(BaseModel):
+#     """Structured response from the main SQL fixing agent."""
 
-    corrected_sql: str = Field(..., description="The corrected/optimized SQL query")
-    explanation: str = Field(..., description="Explanation of what was fixed and why")
+#     corrected_sql: str = Field(..., description="The corrected/optimized SQL query")
+#     explanation: str = Field(..., description="Explanation of what was fixed and why")
 
 
 class SQLAnalysisContext(BaseModel):
@@ -176,7 +170,7 @@ agent = Agent(
     system_prompt=BENCHMARK_PROMPT,
 )
 
-# Web UI agen
+# Web UI agent
 webui_agent = Agent(
     "google-gla:gemini-3-flash-preview",
     deps_type=AgentDeps,
@@ -264,8 +258,6 @@ async def analyze_and_fix_sql(
     ctx: RunContext[AgentDeps],
     issue_sql: str,
     query_intent: str,
-    db_id: str,
-    dialect: str = "postgres",
     include_all_tables: bool = False,
 ) -> SQLAnalysisContext:
     """
@@ -288,19 +280,18 @@ async def analyze_and_fix_sql(
     Args:
             issue_sql: The SQL query to analyze and fix
             query_intent: Natural language description of what the query should do
-            db_id: Database identifier (must match ctx.deps.database.database_name)
-            dialect: SQL dialect (default: postgres)
             include_all_tables: Whether to include all tables in schema (default: False)
 
     Returns:
             SQLAnalysisContext with schema, validation errors, and similar examples
     """
 
-    # Step 1: Get schema information
+    # Derive db_id and dialect from deps (PostgreSQL-only project)
     database = ctx.deps.database
+    db_id = database.database_name
+    dialect = "postgres"
 
     if include_all_tables:
-        # Include all tables
         schema_description = database.describe_schema()
         available_tables = database.table_names
     else:
@@ -312,11 +303,9 @@ async def analyze_and_fix_sql(
                 schema_description = database.describe_schema(list(referenced_tables))
                 available_tables = list(referenced_tables)
             else:
-                # No tables found, include all
                 schema_description = database.describe_schema()
                 available_tables = database.table_names
         except Exception:
-            # Parsing failed, include all tables
             schema_description = database.describe_schema()
             available_tables = database.table_names
 
@@ -326,7 +315,6 @@ async def analyze_and_fix_sql(
     # Step 3: Get similar examples
     examples = find_similar_examples(query_intent, n_results=6)
 
-    # Format similar examples
     similar_examples_formatted = [
         {
             "sql": ex.sql,

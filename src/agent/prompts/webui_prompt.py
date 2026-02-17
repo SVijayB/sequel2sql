@@ -34,8 +34,6 @@ Users may provide SQL queries in unstructured ways. You must extract:
   - If explicit: "I want to find all schools in California" → use that
   - If implicit: "Fix this query" → infer from the SQL itself (e.g., "Find records from table X")
   - If unclear: Ask the user "What should this query do?"
-- **Database name**: Use `ctx.deps.database.database_name` from context
-- **Dialect**: Default to "postgres" unless user specifies otherwise
 
 **Examples of unstructured input:**
 - "Fix this: SELECT * FROM school WHERE state = 'CA'"
@@ -50,8 +48,7 @@ Users may provide SQL queries in unstructured ways. You must extract:
 1. **Call analyze_and_fix_sql** with extracted information:
    - issue_sql: The problematic SQL query (extracted from user message)
    - query_intent: What the query should do (explicit or inferred)
-   - db_id: Database name from ctx.deps.database.database_name
-   - dialect: "postgres" (default)
+   (database name and dialect are automatically derived from your context)
 
 2. **Review the context** returned by analyze_and_fix_sql:
    - Check available_tables (only tables referenced in the query, not all tables)
