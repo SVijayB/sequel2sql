@@ -1,4 +1,5 @@
 .vscode
+.claude/
 
 # Environment variables
 __pycache__/

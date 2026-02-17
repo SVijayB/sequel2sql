@@ -6,7 +6,6 @@ Deterministic orchestration pipeline that validates SQL, fixes syntax
 errors, retrieves few-shot examples, and calls the main agent.
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -18,8 +17,10 @@ sys.path.insert(0, str(project_root / "src"))
 from typing import List, Optional
 
 import logfire
+import sqlglot
+from sqlglot import exp
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
 from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT
@@ -28,7 +29,7 @@ from src.ast_parsers.llm_tool import validate_sql
 from src.ast_parsers.models import ValidationErrorOut
 from src.database import AgentDeps, Database, DBQueryResponse
 from src.database import execute_sql as _execute_sql
-from src.query_intent_vectordb.search_similar_query import (
+from src.query_intent_vectorDB.search_similar_query import (
     FewShotExample,
     find_similar_examples,
 )
@@ -83,21 +84,13 @@ def _extract_table_names(sql: str, dialect: str) -> set[str]:
     Returns empty set if parsing fails.
     """
     try:
-        import sqlglot
-        from sqlglot.optimizer.scope import build_scope
-
-        # Parse SQL
         parsed = sqlglot.parse_one(sql, dialect=dialect)
-
-        # Extract table names using scope analysis
         tables = set()
-        for scope in build_scope(parsed).traverse():
-            for table in scope.tables:
-                tables.add(table)
-
+        for table in parsed.find_all(exp.Table):
+            if table.name:
+                tables.add(table.name)
         return tables
     except Exception:
-        # If parsing fails, return empty set
         return set()
 
 
@@ -129,20 +122,29 @@ class FewShotExamplesResult(BaseModel):
     examples: List[FewShotExample]
     query_intent: str
 
+# BELOW MODELS FOR FUTURE USE ONCE WE ADD AGENT PIPELINE, NOT USED NOW
 
-class AgentPipelineResult(BaseModel):
-    """Output of the full orchestration pipeline."""
+# class AgentPipelineResult(BaseModel):
+#     """Output of the full orchestration pipeline."""
 
-    corrected_sql: str = ""
-    explanation: str = ""
-    success: bool = False
+#     corrected_sql: str = ""
+#     explanation: str = ""
+#     success: bool = False
 
 
-class AgentResponse(BaseModel):
-    """Structured response from the main SQL fixing agent."""
+# class AgentResponse(BaseModel):
+#     """Structured response from the main SQL fixing agent."""
 
-    corrected_sql: str = Field(..., description="The corrected/optimized SQL query")
-    explanation: str = Field(..., description="Explanation of what was fixed and why")
+#     corrected_sql: str = Field(..., description="The corrected/optimized SQL query")
+#     explanation: str = Field(..., description="Explanation of what was fixed and why")
+
+
+class SchemaDescription(BaseModel):
+    """Database schema information returned by describe_database_schema tool."""
+
+    database_id: str
+    available_tables: list[str]
+    schema_description: str
 
 
 class SQLAnalysisContext(BaseModel):
@@ -176,7 +178,7 @@ agent = Agent(
     system_prompt=BENCHMARK_PROMPT,
 )
 
-# Web UI agen
+# Web UI agent
 webui_agent = Agent(
     "google-gla:gemini-3-flash-preview",
     deps_type=AgentDeps,
@@ -264,8 +266,6 @@ async def analyze_and_fix_sql(
     ctx: RunContext[AgentDeps],
     issue_sql: str,
     query_intent: str,
-    db_id: str,
-    dialect: str = "postgres",
     include_all_tables: bool = False,
 ) -> SQLAnalysisContext:
     """
@@ -288,19 +288,18 @@ async def analyze_and_fix_sql(
     Args:
             issue_sql: The SQL query to analyze and fix
             query_intent: Natural language description of what the query should do
-            db_id: Database identifier (must match ctx.deps.database.database_name)
-            dialect: SQL dialect (default: postgres)
             include_all_tables: Whether to include all tables in schema (default: False)
 
     Returns:
             SQLAnalysisContext with schema, validation errors, and similar examples
     """
 
-    # Step 1: Get schema information
+    # Derive db_id and dialect from deps (PostgreSQL-only project)
     database = ctx.deps.database
+    db_id = database.database_name
+    dialect = "postgres"
 
     if include_all_tables:
-        # Include all tables
         schema_description = database.describe_schema()
         available_tables = database.table_names
     else:
@@ -312,11 +311,9 @@ async def analyze_and_fix_sql(
                 schema_description = database.describe_schema(list(referenced_tables))
                 available_tables = list(referenced_tables)
             else:
-                # No tables found, include all
                 schema_description = database.describe_schema()
                 available_tables = database.table_names
         except Exception:
-            # Parsing failed, include all tables
             schema_description = database.describe_schema()
             available_tables = database.table_names
 
@@ -326,7 +323,6 @@ async def analyze_and_fix_sql(
     # Step 3: Get similar examples
     examples = find_similar_examples(query_intent, n_results=6)
 
-    # Format similar examples
     similar_examples_formatted = [
         {
             "sql": ex.sql,
@@ -351,10 +347,37 @@ async def analyze_and_fix_sql(
     )
 
 
+@agent.tool
+def describe_database_schema(
+    ctx: RunContext[AgentDeps],
+    table_names: list[str] | None = None,
+) -> SchemaDescription:
+    """Get the database schema description. Use this to discover
+    available tables and their columns, types, and constraints.
+
+    Call with no arguments to list all tables and their full schemas.
+    Call with specific table_names to get schema for only those tables.
+
+    Args:
+        ctx: Run context containing database connection
+        table_names: Optional list of specific table names to describe
+
+    Returns:
+        SchemaDescription with table list and DDL-like schema text
+    """
+    database = ctx.deps.database
+    return SchemaDescription(
+        database_id=database.database_name,
+        available_tables=database.table_names,
+        schema_description=database.describe_schema(table_names),
+    )
+
+
 webui_agent.tool(name="execute_sql_query")(execute_sql_query)
 webui_agent.tool_plain(name="validate_query")(validate_query)
 webui_agent.tool_plain(name="find_similar_examples")(similar_examples_tool)
 webui_agent.tool(name="analyze_and_fix_sql")(analyze_and_fix_sql)
+webui_agent.tool(name="describe_database_schema")(describe_database_schema)
 
 
 # =============================================================================
