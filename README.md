@@ -1,7 +1,10 @@
 # Sequel2SQL
 
 <p align="center">
-    <img src="assets/logo.png" alt="Logo" border="0">
+    <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png">
+        <img alt="Switcher for light and dark mode" src="assets/logo.png">
+    </picture>
     <br>An agentic LLM + RAG framework for PostgreSQL error diagnosis, optimization, and correction.
 </p>
 
