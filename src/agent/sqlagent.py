@@ -49,7 +49,7 @@ logfire.instrument_pydantic_ai()
 def get_database_deps(
     database_name: str,
     host: str = "localhost",
-    port: int = 5432,
+    port: int = 5433,
     user: str = "root",
     password: str = "123123",
     max_return_values: int = 200,
@@ -59,7 +59,7 @@ def get_database_deps(
     Args:
             database_name: Name of the PostgreSQL database to connect to
             host: PostgreSQL host (default: localhost)
-            port: PostgreSQL port (default: 5432)
+            port: PostgreSQL port (default: 5433)
             user: PostgreSQL username (default: root)
             password: PostgreSQL password (default: 123123)
             max_return_values: Maximum number of result values to return (default: 200)
