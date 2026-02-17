@@ -18,10 +18,10 @@ from typing import List, Optional
 
 import logfire
 import sqlglot
-from sqlglot import exp
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
+from sqlglot import exp
 
 from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT
 from src.agent.prompts.webui_prompt import WEBUI_PROMPT
@@ -29,7 +29,7 @@ from src.ast_parsers.llm_tool import validate_sql
 from src.ast_parsers.models import ValidationErrorOut
 from src.database import AgentDeps, Database, DBQueryResponse
 from src.database import execute_sql as _execute_sql
-from src.query_intent_vectorDB.search_similar_query import (
+from src.query_intent_vectordb.search_similar_query import (
     FewShotExample,
     find_similar_examples,
 )
@@ -121,6 +121,7 @@ class FewShotExamplesResult(BaseModel):
 
     examples: List[FewShotExample]
     query_intent: str
+
 
 # BELOW MODELS FOR FUTURE USE ONCE WE ADD AGENT PIPELINE, NOT USED NOW
 
