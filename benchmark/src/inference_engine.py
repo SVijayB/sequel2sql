@@ -17,7 +17,7 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
-from .api_client import GeminiAPIClient
+from .api_client import LLMClient
 from .checkpoint_manager import CheckpointManager
 from .logger_config import get_logger
 from .prompt_generator import load_prompts
@@ -32,12 +32,11 @@ class InferenceEngine:
     - Progress bar with real-time statistics
     - Checkpoint saving every N queries
     - Resume from checkpoint capability
-    - Simpler debugging and key rotation
     """
 
     def __init__(
         self,
-        api_client: GeminiAPIClient,
+        api_client: LLMClient,
         checkpoint_manager: CheckpointManager,
         checkpoint_frequency: int = 10,
     ):
@@ -45,7 +44,7 @@ class InferenceEngine:
         Initialize the inference engine.
 
         Args:
-            api_client: Configured GeminiAPIClient instance
+            api_client: Configured LLMClient instance
             checkpoint_manager: CheckpointManager instance
             checkpoint_frequency: Save checkpoint every N queries
         """
@@ -203,12 +202,12 @@ class InferenceEngine:
                 progress.update(task_id, advance=1)
 
                 # Update description with current stats
-                current_key = self.api_client.get_current_key_index()
                 passed = self.queries_completed
                 failed = self.checkpoint_manager.get_failed_count()
+                model_name = self.api_client.model_config.get("display_name", "LLM")
                 progress.update(
                     task_id,
-                    description=f"Generating SQL Solutions [cyan](Key: {current_key}/8)[/cyan] [green]✓{passed}[/green] [red]✗{failed}[/red]",
+                    description=f"Generating SQL Solutions [{model_name}] [green]\u2713{passed}[/green] [red]\u2717{failed}[/red]",
                 )
 
         # Final checkpoint save
@@ -238,7 +237,12 @@ if __name__ == "__main__":
     # Test inference engine
     from datetime import datetime
 
-    from .config import get_data_dir, get_model_config, get_outputs_dir, load_api_keys
+    from .config import (
+        DEFAULT_PROVIDER,
+        get_data_dir,
+        get_model_config,
+        get_outputs_dir,
+    )
     from .logger_config import setup_logger
     from .prompt_generator import generate_prompts_from_file
 
@@ -246,10 +250,8 @@ if __name__ == "__main__":
     logger = setup_logger(timestamp)
 
     # Setup
-    api_keys = load_api_keys()
-    model_config = get_model_config()
-
-    # Create test output directory
+    model_config = get_model_config(DEFAULT_PROVIDER)
+    api_client = LLMClient(model_config)
     output_dir = get_outputs_dir() / f"test_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -261,7 +263,6 @@ if __name__ == "__main__":
     generate_prompts_from_file(data_file, prompts_file, limit=5)
 
     # Initialize components
-    api_client = GeminiAPIClient(api_keys, model_config)
     checkpoint_manager = CheckpointManager(output_dir)
 
     # Run inference

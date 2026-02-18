@@ -24,7 +24,7 @@ def display_logo() -> None:
         Panel(
             f"[bold cyan]{logo}[/bold cyan]\n"
             f"[bold white]BENCHMARK EVALUATION SYSTEM[/bold white]\n"
-            f"[dim]PostgreSQL SQL Generation Benchmark using Gemma 3 27B[/dim]",
+            f"[dim]PostgreSQL SQL Generation Benchmark[/dim]",
             border_style="cyan",
             padding=(1, 2),
         )
@@ -119,13 +119,33 @@ def show_main_menu() -> Dict[str, Any]:
     return {"action": choice}
 
 
-def ask_subset_size() -> Optional[int]:
+def ask_provider(providers: Dict[str, Any]) -> Optional[str]:
     """
-    Ask for subset size.
+    Ask the user to select an LLM provider/model.
+
+    Args:
+        providers: Dict mapping provider key -> config dict with 'display_name'
 
     Returns:
-        Number of queries, or None if cancelled
+        Selected provider key (e.g. "google"), or None if cancelled
     """
+    choices = [
+        questionary.Choice(
+            f"{cfg['display_name']}",
+            value=key,
+        )
+        for key, cfg in providers.items()
+    ]
+
+    answer = questionary.select(
+        "Which model would you like to use?",
+        choices=choices,
+    ).ask()
+
+    return answer
+
+
+def ask_subset_size() -> Optional[int]:
 
     def validate_number(text):
         if not text.isdigit():
@@ -259,18 +279,18 @@ def confirm_delete(run: Dict[str, Any]) -> bool:
     return answer
 
 
-def display_config_summary(
-    config: Dict[str, Any], num_keys: int, total_queries: int
-) -> None:
+def display_config_summary(config: Dict[str, Any], total_queries: int) -> None:
     """Display configuration summary."""
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column("Field", style="bold cyan")
     table.add_column("Value", style="white")
 
     table.add_row("Dialect", "PostgreSQL 14.12")
-    table.add_row("Model", "Google Gemma 3 27B")
+    table.add_row(
+        "Model", config.get("display_name", config.get("model_id", "Unknown"))
+    )
+    table.add_row("Provider", config.get("provider", "Unknown").capitalize())
     table.add_row("Total Queries", str(total_queries))
-    table.add_row("API Keys", f"{num_keys} configured")
     table.add_row("Processing", "Sequential (one query at a time)")
 
     console.print(Panel(table, title="[bold]Configuration[/bold]", border_style="blue"))

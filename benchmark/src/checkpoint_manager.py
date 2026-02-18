@@ -61,7 +61,6 @@ class CheckpointManager:
                 "successful_calls": 0,
                 "failed_calls": 0,
                 "total_retries": 0,
-                "key_usage": {},
                 "average_query_time": 0.0,
                 "inference_start_time": None,
                 "inference_end_time": None,
@@ -144,9 +143,6 @@ class CheckpointManager:
 
         # Update API statistics if provided
         if api_stats:
-            self.checkpoint_data["current_api_key_index"] = api_stats.get(
-                "current_key_index", 0
-            )
             self.checkpoint_data["statistics"]["total_api_calls"] = api_stats.get(
                 "total_requests", 0
             )
@@ -155,9 +151,6 @@ class CheckpointManager:
             )
             self.checkpoint_data["statistics"]["failed_calls"] = api_stats.get(
                 "failed_requests", 0
-            )
-            self.checkpoint_data["statistics"]["key_usage"] = api_stats.get(
-                "key_usage", {}
             )
 
             # Calculate average query time

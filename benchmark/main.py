@@ -21,14 +21,16 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from src.api_client import GeminiAPIClient
+from src.api_client import LLMClient
 from src.checkpoint_manager import CheckpointManager
 from src.config import (
+    DEFAULT_PROVIDER,
+    PROVIDERS,
     get_benchmark_dir,
     get_data_dir,
     get_model_config,
     get_outputs_dir,
-    load_api_keys,
+    load_api_key,
     validate_config,
 )
 from src.inference_engine import InferenceEngine
@@ -36,6 +38,7 @@ from src.logger_config import get_logger, setup_logger
 from src.post_processor import process_responses_file
 from src.prompt_generator import generate_prompts_from_file
 from src.ui import (
+    ask_provider,
     ask_subset_size,
     confirm_delete,
     confirm_start,
@@ -210,7 +213,7 @@ def main():
 
     # ========== Parse Arguments ==========
     parser = argparse.ArgumentParser(
-        description="SEQUEL2SQL Benchmark - Test SQL query debugging with Gemma 3 27B"
+        description="SEQUEL2SQL Benchmark - Test SQL query debugging with LLMs"
     )
     parser.add_argument(
         "--limit",
@@ -218,19 +221,29 @@ def main():
         default=None,
         help="Limit the number of queries to process (useful for testing, e.g., --limit 20). If not provided, UI will prompt.",
     )
+    parser.add_argument(
+        "--provider",
+        type=str,
+        default=DEFAULT_PROVIDER,
+        choices=list(PROVIDERS.keys()),
+        help=f"LLM provider to use. Choices: {', '.join(PROVIDERS.keys())}. Default: {DEFAULT_PROVIDER}",
+    )
     args = parser.parse_args()
+    # provider may be overridden interactively below when None
+    cli_provider = args.provider if "--provider" in " ".join(sys.argv[1:]) else None
+    provider = cli_provider or DEFAULT_PROVIDER
 
     # ========== Validate Configuration ==========
-    try:
-        validate_config()
-        api_keys = load_api_keys()
-        model_config = get_model_config()
-    except SystemExit:
-        # Configuration validation failed (already printed error)
-        return 1
-    except Exception as e:
-        display_error(f"Configuration error: {e}")
-        return 1
+    # For CLI mode, validate immediately. For interactive mode, validate after provider is selected.
+    if cli_provider is not None:
+        try:
+            validate_config(provider)
+            model_config = get_model_config(provider)
+        except SystemExit:
+            return 1
+        except Exception as e:
+            display_error(f"Configuration error: {e}")
+            return 1
 
     # ========== Display UI ==========
     display_logo()
@@ -248,9 +261,21 @@ def main():
     output_dir = None
     checkpoint_manager = None
     resume_mode = False
+    model_config = get_model_config(provider) if cli_provider is not None else None
 
     # If command line limit provided, skip menu and start directly
     if query_limit is not None:
+        # If no explicit --provider given on CLI, ask interactively
+        if model_config is None:
+            selected_provider = ask_provider(PROVIDERS)
+            if selected_provider is None:
+                return 0
+            try:
+                validate_config(selected_provider)
+                model_config = get_model_config(selected_provider)
+            except SystemExit:
+                return 1
+
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         logger = setup_logger(timestamp)
         logger.info("=" * 70)
@@ -260,7 +285,7 @@ def main():
         total_queries = min(query_limit, total_available_queries)
         logger.info(f"⚠️  Running SUBSET MODE with {total_queries} queries")
 
-        display_config_summary(model_config, len(api_keys), total_queries)
+        display_config_summary(model_config, total_queries)
 
         if not confirm_start():
             logger.info("User cancelled. Exiting...")
@@ -283,6 +308,16 @@ def main():
             action = choice["action"]
 
             if action == "complete":
+                # Ask which model to use
+                selected_provider = ask_provider(PROVIDERS)
+                if selected_provider is None:
+                    continue
+                try:
+                    validate_config(selected_provider)
+                    model_config = get_model_config(selected_provider)
+                except SystemExit:
+                    continue
+
                 # Start complete run
                 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 logger = setup_logger(timestamp)
@@ -294,7 +329,7 @@ def main():
                 total_queries = total_available_queries
                 logger.info(f"Running FULL benchmark with {total_queries} queries")
 
-                display_config_summary(model_config, len(api_keys), total_queries)
+                display_config_summary(model_config, total_queries)
 
                 if not confirm_start():
                     continue
@@ -309,6 +344,16 @@ def main():
                 break
 
             elif action == "subset":
+                # Ask which model to use
+                selected_provider = ask_provider(PROVIDERS)
+                if selected_provider is None:
+                    continue
+                try:
+                    validate_config(selected_provider)
+                    model_config = get_model_config(selected_provider)
+                except SystemExit:
+                    continue
+
                 # Start subset run
                 query_limit = ask_subset_size()
                 if query_limit is None:
@@ -323,7 +368,7 @@ def main():
                 total_queries = min(query_limit, total_available_queries)
                 logger.info(f"⚠️  Running SUBSET MODE with {total_queries} queries")
 
-                display_config_summary(model_config, len(api_keys), total_queries)
+                display_config_summary(model_config, total_queries)
 
                 if not confirm_start():
                     continue
@@ -369,9 +414,7 @@ def main():
                             f"Progress: {selected_run['completed']}/{total_queries} queries"
                         )
 
-                        display_config_summary(
-                            model_config, len(api_keys), total_queries
-                        )
+                        display_config_summary(model_config, total_queries)
 
                         resume_mode = True
                         logger.info("Resuming from checkpoint...")
@@ -431,14 +474,14 @@ def main():
 
     display_phase_header(
         "Phase 2: LLM Inference",
-        "Calling Gemma 3 27B with intelligent API key rotation...",
+        f"Calling {model_config['display_name']} via pydantic-ai...",
     )
 
     checkpoint_manager.set_phase("inference")
 
     try:
-        # Initialize API client
-        api_client = GeminiAPIClient(api_keys, model_config)
+        # Initialize LLM client
+        api_client = LLMClient(model_config)
 
         # Initialize inference engine (sequential processing)
         inference_engine = InferenceEngine(
@@ -462,7 +505,6 @@ def main():
             f"  Successful: {stats['successful_requests']} ({stats['success_rate']:.1f}%)"
         )
         logger.info(f"  Failed: {stats['failed_requests']}")
-        logger.info(f"  Key usage: {stats['key_usage']}")
 
     except Exception as e:
         display_error(f"Inference failed: {e}")

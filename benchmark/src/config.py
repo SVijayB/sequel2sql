@@ -3,7 +3,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
@@ -12,66 +12,137 @@ ROOT_DIR = Path(__file__).parent.parent.parent
 ENV_PATH = ROOT_DIR / ".env"
 load_dotenv(ENV_PATH)
 
+# Supported providers and their model configs
+PROVIDERS = {
+    "google": {
+        "model_id": "google-gla:models/gemma-3-27b-it",
+        "display_name": "Google Gemma 3 27B",
+    },
+    "mistral": {
+        "model_id": "mistral:mistral-large-latest",
+        "display_name": "Mistral Large Latest",
+    },
+}
 
-# Gemma 3 27B Model Configuration (hardcoded since we only use this model)
-MODEL_CONFIG = {
-    "model_name": "models/gemma-3-27b-it",
-    "base_url": "https://generativelanguage.googleapis.com/v1beta",
+DEFAULT_PROVIDER = "mistral"
+
+# General run configuration
+RUN_CONFIG = {
     "timeout": 10,  # seconds
     "max_threads": 8,
     "checkpoint_frequency": 10,  # Save checkpoint every N queries
 }
 
 
-def load_api_keys() -> List[str]:
+def load_api_key(provider: str) -> str:
     """
-    Load 8 Gemini API keys from environment variables.
+    Load a single API key for the given provider from environment variables.
+
+    Args:
+        provider: "google" or "mistral"
 
     Returns:
-        List of 8 API keys
+        API key string
 
     Raises:
-        SystemExit: If .env file doesn't exist or keys are missing
+        SystemExit: If .env file doesn't exist or the key is missing
     """
     if not ENV_PATH.exists():
         print(f"\n❌ Error: .env file not found at {ENV_PATH}")
         print(f"\n💡 Please create a .env file from the template:")
         print(f"   cp {ROOT_DIR}/.env.example {ROOT_DIR}/.env")
-        print(f"   # Then edit .env and add your 8 Gemini API keys\n")
+        sys.exit(1)
+
+    env_var_map = {
+        "google": "GOOGLE_API_KEY",
+        "mistral": "MISTRAL_API_KEY",
+    }
+
+    env_var = env_var_map.get(provider)
+    if not env_var:
+        print(f"\n❌ Error: Unknown provider '{provider}'")
+        print(f"   Supported providers: {', '.join(PROVIDERS.keys())}")
+        sys.exit(1)
+
+    key = os.getenv(env_var)
+    if not key or key.startswith("your_"):
+        print(f"\n❌ Error: Missing or invalid API key in .env: {env_var}")
+        if provider == "google":
+            print(f"   Get your key from: https://aistudio.google.com/apikey")
+        elif provider == "mistral":
+            print(f"   Get your key from: https://console.mistral.ai/")
+        print(f"   Then set it in {ENV_PATH}\n")
+        sys.exit(1)
+
+    return key
+
+
+# Keep backward-compatible helper that loads 8 Gemini keys for old code paths
+def load_api_keys() -> List[str]:
+    """
+    Load API keys from environment variables.
+    For Google, loads up to 8 rotation keys (GEMINI_API_KEY_1..8) if present,
+    falling back to GOOGLE_API_KEY.
+
+    Returns:
+        List of API keys (at least one)
+    """
+    if not ENV_PATH.exists():
+        print(f"\n❌ Error: .env file not found at {ENV_PATH}")
         sys.exit(1)
 
     api_keys = []
-    missing_keys = []
 
+    # Try numbered rotation keys first (legacy)
     for i in range(1, 9):
         key = os.getenv(f"GEMINI_API_KEY_{i}")
-        if not key or key == "your_api_key_here":
-            missing_keys.append(f"GEMINI_API_KEY_{i}")
-        else:
+        if key and not key.startswith("your_"):
             api_keys.append(key)
 
-    if missing_keys:
-        print(f"\n❌ Error: Missing or invalid API keys in .env:")
-        for key_name in missing_keys:
-            print(f"   - {key_name}")
-        print(f"\n💡 Please edit {ENV_PATH} and add valid Gemini API keys")
-        print(f"   Get your keys from: https://ai.google.dev/\n")
+    # Fall back to single GOOGLE_API_KEY
+    if not api_keys:
+        key = os.getenv("GOOGLE_API_KEY")
+        if key and not key.startswith("your_"):
+            api_keys.append(key)
+
+    if not api_keys:
+        print(
+            "\n❌ Error: No valid Google API keys found in .env."
+            "\n   Set GOOGLE_API_KEY or GEMINI_API_KEY_1..8\n"
+        )
         sys.exit(1)
 
     return api_keys
 
 
-def get_model_config() -> Dict[str, Any]:
+def get_model_config(provider: Optional[str] = None) -> Dict[str, Any]:
     """
-    Get model configuration for Gemma 3 27B.
+    Get model configuration for the given provider.
+
+    Args:
+        provider: "google" or "mistral". Defaults to DEFAULT_PROVIDER.
 
     Returns:
         Dictionary containing model configuration
     """
-    return MODEL_CONFIG.copy()
+    if provider is None:
+        provider = DEFAULT_PROVIDER
+
+    if provider not in PROVIDERS:
+        print(f"\n❌ Error: Unknown provider '{provider}'")
+        print(f"   Supported providers: {', '.join(PROVIDERS.keys())}")
+        sys.exit(1)
+
+    config = {
+        **RUN_CONFIG,
+        "provider": provider,
+        "model_id": PROVIDERS[provider]["model_id"],
+        "display_name": PROVIDERS[provider]["display_name"],
+    }
+    return config
 
 
-def validate_config() -> bool:
+def validate_config(provider: Optional[str] = None) -> bool:
     """
     Validate the complete configuration.
 
@@ -81,8 +152,11 @@ def validate_config() -> bool:
     Raises:
         SystemExit: If configuration is invalid
     """
-    # Validate API keys
-    api_keys = load_api_keys()
+    if provider is None:
+        provider = DEFAULT_PROVIDER
+
+    # Validate API key for the chosen provider
+    load_api_key(provider)
 
     # Validate paths
     benchmark_dir = Path(__file__).parent.parent
@@ -130,13 +204,16 @@ if __name__ == "__main__":
     print(f"\nRoot directory: {ROOT_DIR}")
     print(f"Benchmark directory: {get_benchmark_dir()}")
     print(f"Data directory: {get_data_dir()}")
-    print(f"\nModel configuration:")
-    for key, value in MODEL_CONFIG.items():
-        print(f"  {key}: {value}")
 
-    print(f"\nLoading API keys...")
-    api_keys = load_api_keys()
-    print(f"✓ Loaded {len(api_keys)} API keys")
+    for provider in PROVIDERS:
+        print(f"\nModel configuration [{provider}]:")
+        config = get_model_config(provider)
+        for key, value in config.items():
+            print(f"  {key}: {value}")
+
+    print(f"\nLoading API key for default provider ({DEFAULT_PROVIDER})...")
+    key = load_api_key(DEFAULT_PROVIDER)
+    print(f"✓ Loaded API key (length={len(key)})")
 
     print(f"\nValidating configuration...")
     if validate_config():

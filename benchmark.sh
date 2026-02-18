@@ -28,7 +28,7 @@ if [ ! -f "$ROOT_DIR/.env" ]; then
     echo -e "${YELLOW}Please create a .env file with your API keys:${NC}"
     echo -e "  ${CYAN}cd $ROOT_DIR${NC}"
     echo -e "  ${CYAN}cp .env.example .env${NC}"
-    echo -e "  ${CYAN}# Edit .env and add your 8 Gemini API keys${NC}"
+    echo -e "  ${CYAN}# Edit .env and add GOOGLE_API_KEY and/or MISTRAL_API_KEY${NC}"
     echo ""
     exit 1
 fi
@@ -105,6 +105,11 @@ fi
 
 echo -e "${GREEN}✓${NC} Database dumps found"
 
+# Show available models
+echo ""
+echo -e "${CYAN}Available models:${NC}"
+echo -e "  -- Google Gemma 3 27B   (requires GOOGLE_API_KEY in .env)"
+echo -e "  -- Mistral Large Latest (requires MISTRAL_API_KEY in .env)"
 echo ""
 echo -e "${CYAN}Starting benchmark...${NC}"
 echo ""
@@ -112,5 +117,5 @@ echo ""
 # Change to benchmark directory
 cd "$BENCHMARK_DIR"
 
-# Run main script
+# Run main script, passing all args through (e.g. --limit 20 --provider mistral)
 exec $PYTHON_CMD main.py "$@"
