@@ -2,24 +2,43 @@
 Sequel2SQL Agent
 
 A Pydantic AI agent using LLMs for SQL query assistance.
-This is the foundational agent before adding RAG and AST components.
+Deterministic orchestration pipeline that validates SQL, fixes syntax
+errors, retrieves few-shot examples, and calls the main agent.
 """
 
-from typing import Dict, List, Optional
+import sys
+from pathlib import Path
+from typing import List, Optional
 
 import logfire
+import sqlglot
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
+from sqlglot import exp
 
-from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT
-from src.agent.prompts.webui_prompt import WEBUI_PROMPT
-from src.database import AgentDeps, Database, DBQueryResponse
-from src.database import execute_sql as _execute_sql
+# Add both project root and src/ to sys.path for imports to work
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "src"))
+
+# noqa: E402 - Ignore import order since we need to set up sys.path first
+from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT  # noqa: E402
+from src.agent.prompts.webui_prompt import WEBUI_PROMPT  # noqa: E402
+from src.ast_parsers.llm_tool import validate_sql  # noqa: E402
+from src.ast_parsers.models import ValidationErrorOut  # noqa: E402
+from src.database import AgentDeps, Database, DBQueryResponse  # noqa: E402
+from src.database import execute_sql as _execute_sql  # noqa: E402
+from src.query_intent_vectordb.search_similar_query import (  # noqa: E402
+    FewShotExample,
+    find_similar_examples,
+)
 
 load_dotenv()
 
-logfire.configure()
+
+# Logfire configuration (make sure to set LOGFIRE_TOKEN in .env for logging to work)
+logfire.configure(send_to_logfire="if-token-present")
 logfire.instrument_pydantic_ai()
 
 # =============================================================================
@@ -30,7 +49,7 @@ logfire.instrument_pydantic_ai()
 def get_database_deps(
     database_name: str,
     host: str = "localhost",
-    port: int = 5432,
+    port: int = 5433,
     user: str = "root",
     password: str = "123123",
     max_return_values: int = 200,
@@ -40,7 +59,7 @@ def get_database_deps(
     Args:
             database_name: Name of the PostgreSQL database to connect to
             host: PostgreSQL host (default: localhost)
-            port: PostgreSQL port (default: 5432)
+            port: PostgreSQL port (default: 5433)
             user: PostgreSQL username (default: root)
             password: PostgreSQL password (default: 123123)
             max_return_values: Maximum number of result values to return (default: 200)
@@ -58,81 +77,99 @@ def get_database_deps(
     return AgentDeps(database=database, max_return_values=max_return_values)
 
 
+def _extract_table_names(sql: str, dialect: str) -> set[str]:
+    """
+    Best-effort extraction of table names from SQL query using sqlglot.
+
+    Returns empty set if parsing fails.
+    """
+    try:
+        parsed = sqlglot.parse_one(sql, dialect=dialect)
+        tables = set()
+        for table in parsed.find_all(exp.Table):
+            if table.name:
+                tables.add(table.name)
+        return tables
+    except Exception:
+        return set()
+
+
 # =============================================================================
-# Pydantic Models for validate_query tool
+# Pydantic Models
 # =============================================================================
 
 
-class ValidateQueryInput(BaseModel):
-    """Input for SQL validation."""
+class BenchmarkInputForAgent(BaseModel):
+    """Unified input representing a benchmark query for the agent."""
+
+    issue_sql: str
+    db_id: str
+    dialect: str = "postgres"
+    query: str
+
+
+class ValidateQueryToolInput(BaseModel):
+    """Input for the SQL validation tool."""
 
     sql: str
-    schema_def: Optional[Dict[str, Dict[str, str]]] = None
+    db_id: Optional[str] = None
     dialect: str = "postgres"
 
 
-class ValidationError(BaseModel):
-    """A single validation error."""
+class FewShotExamplesResult(BaseModel):
+    """Wrapper for few-shot examples returned by retrieval."""
 
-    message: str
-    error_type: str  # e.g., 'syntax_error', 'schema_hallucination_col'
-    line: Optional[int] = None
-    column: Optional[int] = None
+    examples: List[FewShotExample]
+    query_intent: str
 
 
-class QueryMetadata(BaseModel):
-    """Metadata about query structure and complexity."""
+# BELOW MODELS FOR FUTURE USE ONCE WE ADD AGENT PIPELINE, NOT USED NOW
 
-    tables: List[str] = []
-    columns: List[str] = []
-    complexity_score: Optional[float] = None
+# class AgentPipelineResult(BaseModel):
+#     """Output of the full orchestration pipeline."""
 
-
-class ValidationResult(BaseModel):
-    """Result of SQL query validation."""
-
-    valid: bool
-    errors: List[ValidationError] = []
-    sql: str = ""
-    query_metadata: Optional[QueryMetadata] = None
-    tags: List[str] = []  # e.g., ['schema_hallucination_col']
+#     corrected_sql: str = ""
+#     explanation: str = ""
+#     success: bool = False
 
 
-# =============================================================================
-# Pydantic Models for find_similar_examples tool
-# =============================================================================
+# class AgentResponse(BaseModel):
+#     """Structured response from the main SQL fixing agent."""
+
+#     corrected_sql: str = Field(..., description="The corrected/optimized SQL query")
+#     explanation: str = Field(..., description="Explanation of what was fixed and why")
 
 
-class FindSimilarInput(BaseModel):
-    """Input for finding similar SQL examples."""
+class SchemaDescription(BaseModel):
+    """Database schema information returned by describe_database_schema tool."""
 
-    intent: str
-    sql_query: str
-    n_results: int = 5
-
-
-class SimilarExample(BaseModel):
-    """A single similar example from the vector database."""
-
-    intent: str
-    sql_query: str
-    difficulty: str
-    complexity_score: float
-    pattern_signature: str
-    clauses_present: List[str]
-    distance: float
-    db_id: str
+    database_id: str
+    available_tables: list[str]
+    schema_description: str
 
 
-class SimilarExamplesResult(BaseModel):
-    """Result containing list of similar examples."""
+class SQLAnalysisContext(BaseModel):
+    """Comprehensive context for SQL query fixing (webui_agent tool)."""
 
-    examples: List[SimilarExample]
-    query_intent: str  # The original intent searched for
+    # Schema information
+    database_id: str
+    available_tables: List[str]
+    schema_description: str  # DDL-like formatted schema
+
+    # Validation results
+    has_errors: bool
+    validation_errors: List[dict]  # [{tag: "SYNTAX_ERROR", message: "..."}]
+
+    # Few-shot examples
+    similar_examples: List[dict]  # [{sql: "...", intent: "...", explanation: "..."}]
+
+    # Metadata
+    query_intent: str
+    dialect: str
 
 
 # =============================================================================
-# Agent Definitions
+# Agent Definition
 # =============================================================================
 
 # Default agent
@@ -142,15 +179,30 @@ agent = Agent(
     system_prompt=BENCHMARK_PROMPT,
 )
 
-# Web UI agen
+# Web UI agent
 webui_agent = Agent(
     "google-gla:gemini-3-flash-preview",
     deps_type=AgentDeps,
     system_prompt=WEBUI_PROMPT,
 )
 
+SYNTAX_FIXER_PROMPT = (
+    "You are a PostgreSQL syntax fixer. "
+    "Given an SQL query with syntax errors, the error details, and the "
+    "database schema, return ONLY the corrected SQL query. "
+    "Do not include any explanation, markdown, or commentary — "
+    "just the raw SQL."
+)
+
+syntax_fixer_agent = Agent(
+    "google-gla:gemini-3-flash-preview",
+    system_prompt=SYNTAX_FIXER_PROMPT,
+    output_type=str,
+)
+
+
 # =============================================================================
-# Tool Definitions
+# Tool Definitions (kept for future use as agent tools)
 # =============================================================================
 
 
@@ -169,7 +221,7 @@ def execute_sql_query(ctx: RunContext[AgentDeps], sql: str) -> DBQueryResponse:
 
 
 @agent.tool_plain
-def validate_query(input: ValidateQueryInput) -> ValidationResult:
+def validate_query(input: ValidateQueryToolInput) -> List[ValidationErrorOut]:
     """
     Validate SQL query syntax and optionally check against a database schema.
 
@@ -180,25 +232,166 @@ def validate_query(input: ValidateQueryInput) -> ValidationResult:
 
     Returns validation status, any errors found, and structural metadata.
     """
-    raise NotImplementedError("AST validation not yet implemented")
+    return validate_sql(
+        input.sql,
+        db_name=input.db_id,
+        dialect=input.dialect,
+    )
 
 
 @agent.tool_plain
-def find_similar_examples(input: FindSimilarInput) -> SimilarExamplesResult:
+def similar_examples_tool(
+    query: str,
+    n_results: int = 6,
+) -> FewShotExamplesResult:
     """
-    Find similar SQL query examples from the training database using semantic search.
+        Find similar SQL query examples from the training database
+        using semantic search.
 
     Use this tool to:
     - Find examples of similar queries that were previously corrected
     - Get context for how similar errors were fixed
     - Retrieve queries with similar intent/structure
 
-    Returns top-k similar examples with their metadata and similarity scores.
+        Returns structurally diverse few-shot examples with metadata.
     """
-    raise NotImplementedError("RAG retrieval not yet implemented")
+    examples = find_similar_examples(query, n_results=n_results)
+    return FewShotExamplesResult(
+        examples=examples,
+        query_intent=query,
+    )
 
 
-# Register the same tools on the webui agent
+@agent.tool
+def analyze_and_fix_sql(
+    ctx: RunContext[AgentDeps],
+    issue_sql: str,
+    query_intent: str,
+    include_all_tables: bool = False,
+) -> SQLAnalysisContext:
+    """
+    Comprehensive SQL query analysis and context gathering for fixing.
+
+    This tool orchestrates multiple analysis steps to provide complete context
+    for fixing SQL queries:
+
+    1. Schema Discovery - Get database schema (all tables or only referenced ones)
+    2. Validation - Check for syntax and schema errors
+    3. Semantic Search - Find similar query examples from training data
+
+    After calling this tool, use the returned context to:
+    - Understand what tables/columns are available
+    - See what errors exist in the query
+    - Learn from similar query examples
+    - Optionally call execute_sql_query to sample rows from tables
+    - Produce a corrected SQL query with explanation
+
+    Args:
+            issue_sql: The SQL query to analyze and fix
+            query_intent: Natural language description of what the query should do
+            include_all_tables: Whether to include all tables in schema (default: False)
+
+    Returns:
+            SQLAnalysisContext with schema, validation errors, and similar examples
+    """
+
+    # Derive db_id and dialect from deps (PostgreSQL-only project)
+    database = ctx.deps.database
+    db_id = database.database_name
+    dialect = "postgres"
+
+    if include_all_tables:
+        schema_description = database.describe_schema()
+        available_tables = database.table_names
+    else:
+        # Try to extract referenced tables from the query
+        # This is best-effort - if parsing fails, fall back to all tables
+        try:
+            referenced_tables = _extract_table_names(issue_sql, dialect)
+            if referenced_tables:
+                schema_description = database.describe_schema(list(referenced_tables))
+                available_tables = list(referenced_tables)
+            else:
+                schema_description = database.describe_schema()
+                available_tables = database.table_names
+        except Exception:
+            schema_description = database.describe_schema()
+            available_tables = database.table_names
+
+    # Step 2: Validate SQL query
+    validation_errors = validate_sql(issue_sql, db_name=db_id, dialect=dialect)
+
+    # Step 3: Get similar examples
+    examples = find_similar_examples(query_intent, n_results=6)
+
+    similar_examples_formatted = [
+        {
+            "sql": ex.sql,
+            "intent": ex.intent,
+            "complexity_score": ex.complexity_score,
+            "pattern_signature": ex.pattern_signature,
+        }
+        for ex in examples
+    ]
+
+    return SQLAnalysisContext(
+        database_id=db_id,
+        available_tables=available_tables,
+        schema_description=schema_description,
+        has_errors=(len(validation_errors) > 0),
+        validation_errors=[
+            {"tag": err.tag, "message": err.message} for err in validation_errors
+        ],
+        similar_examples=similar_examples_formatted,
+        query_intent=query_intent,
+        dialect=dialect,
+    )
+
+
+@agent.tool
+def describe_database_schema(
+    ctx: RunContext[AgentDeps],
+    table_names: list[str] | None = None,
+) -> SchemaDescription:
+    """Get the database schema description. Use this to discover
+    available tables and their columns, types, and constraints.
+
+    Call with no arguments to list all tables and their full schemas.
+    Call with specific table_names to get schema for only those tables.
+
+    Args:
+        ctx: Run context containing database connection
+        table_names: Optional list of specific table names to describe
+
+    Returns:
+        SchemaDescription with table list and DDL-like schema text
+    """
+    database = ctx.deps.database
+    return SchemaDescription(
+        database_id=database.database_name,
+        available_tables=database.table_names,
+        schema_description=database.describe_schema(table_names),
+    )
+
+
 webui_agent.tool(name="execute_sql_query")(execute_sql_query)
 webui_agent.tool_plain(name="validate_query")(validate_query)
-webui_agent.tool_plain(name="find_similar_examples")(find_similar_examples)
+webui_agent.tool_plain(name="find_similar_examples")(similar_examples_tool)
+webui_agent.tool(name="analyze_and_fix_sql")(analyze_and_fix_sql)
+webui_agent.tool(name="describe_database_schema")(describe_database_schema)
+
+
+# =============================================================================
+# Note: Pipeline orchestration has been moved
+# =============================================================================
+#
+# The run_pipeline() function has been moved to:
+#   benchmark/agent/pipeline.py
+#
+# The benchmark runner has been moved to:
+#   benchmark/agent/agent_benchmark.py
+#
+# For batch processing of SQL queries, use:
+#   python -m benchmark.agent.agent_benchmark --limit 20
+#
+# =============================================================================

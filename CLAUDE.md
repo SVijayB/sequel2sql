@@ -22,11 +22,12 @@ This project uses [uv](https://github.com/astral-sh/uv) for fast, reliable Pytho
    uv sync
    ```
 
-2. **Set up LogFire (for logging and monitoring):**
+2. **Set up LogFire (optional, for logging and monitoring):**
    ```bash
    uv run logfire auth
    uv run logfire projects new
    ```
+   Then uncomment LogFire configuration in [src/agent/sqlagent.py](src/agent/sqlagent.py)
 
 3. **Configure Google API Key:**
    - Visit [Google AI Studio](https://aistudio.google.com/apikey)
@@ -43,11 +44,67 @@ This project uses [uv](https://github.com/astral-sh/uv) for fast, reliable Pytho
 ### Running the Application
 
 ```bash
-# Run the web interface
+# Run the web interface (main application)
 uv run python sequel2sql.py
 ```
 
 Then open http://localhost:8000 in your browser to access the chat interface.
+
+```bash
+# Run the agent pipeline directly with test cases
+uv run python src/agent/sqlagent.py
+```
+
+### Testing
+
+```bash
+# Run all tests
+uv run pytest
+
+# Run specific test file
+uv run pytest tests/test_validator.py
+
+# Run tests with verbose output
+uv run pytest -v
+
+# Run tests and inspect ChromaDB
+uv run python tests/inspect_chroma_db.py
+```
+
+### Benchmarking
+
+Run the BIRD-CRITIC PostgreSQL benchmark (530 queries):
+
+```bash
+# Interactive mode (recommended for first-time users)
+./benchmark.sh
+
+# Command-line mode - test with limited queries
+./benchmark.sh --limit 20
+
+# Run full benchmark
+./benchmark.sh
+```
+
+See [benchmark/README.md](benchmark/README.md) for detailed setup instructions, data downloads, and configuration.
+
+### Docker Setup for Testing
+
+```bash
+# Start PostgreSQL container
+docker compose -f docker/docker-compose.yml up -d postgres
+
+# Check container status
+docker compose -f docker/docker-compose.yml ps
+
+# Test PostgreSQL connection
+docker compose -f docker/docker-compose.yml exec postgres psql -U root -d postgres -c "SELECT 1, version();"
+
+# Stop containers
+docker compose -f docker/docker-compose.yml down
+```
+
+See [docker/README.md](docker/README.md) for engine versions and connection strings.
 
 ### Managing Dependencies
 
@@ -64,31 +121,77 @@ uv sync
 
 ## Code Architecture
 
-### Current Implementation (v0.1.0)
+### System Overview
 
-**Core Components:**
-- **src/sqlagent.py**: Pydantic AI agent using Google Gemma 3 27B (`gemma-3-27b-it`) via Gemini API
-- **sequel2sql.py**: Main entry point that creates a web interface using `agent.to_web()`
-- **LogFire**: Integrated logging and monitoring for agent traces
+Sequel2SQL uses a **deterministic orchestration pipeline** that combines AST-based validation, semantic retrieval, and LLM reasoning to fix SQL queries. The workflow (see [assets/flowchart.jpg](assets/flowchart.jpg)):
 
-**Planned Components (Coming Soon):**
-- **RAG Pipeline**: Will retrieve context from database schemas, PostgreSQL documentation, and historical query corrections
-- **AST Parser**: Will parse and embed user queries to database for semantic search
-- **Error Diagnosis Flow**: Will analyze SQL errors, retrieve relevant context, and generate corrections
+1. **Syntax Validation** - Parse query through AST validator to detect syntax/schema errors
+2. **Syntax Fixing** - If errors found, use syntax fixer agent (up to 3 retries)
+3. **Semantic Retrieval** - Embed query and retrieve top 6 similar examples from ChromaDB
+4. **LLM Reasoning** - Main agent generates corrected query with few-shot context
+5. **Validation** - Return corrected query with explanation
 
-The planned system workflow (see [assets/flowchart.jpg](assets/flowchart.jpg)):
-1. Receive erroneous SQL query
-2. Parse query through AST and embed to vector DB
-3. Retrieve top 5 relevant examples from training data
-4. Agent-based reasoning to diagnose the issue with RAG context
-5. Generate and validate corrected query
+### Core Components
 
-**Key Dependencies:**
-- **pydantic-ai**: Agent framework for LLM-based workflows
-- **logfire**: Observability and monitoring for agent execution
-- **uvicorn**: ASGI server for the web interface
-- **python-dotenv**: Environment variable management
-- **Google Gemini API**: Access to Gemma 3 27B model
+**Agent Layer** ([src/agent/](src/agent/)):
+- **sqlagent.py**: Main orchestration pipeline with two Pydantic AI agents:
+  - `agent`: Main SQL assistant using `gemini-3-flash-preview`
+  - `syntax_fixer_agent`: Dedicated syntax error fixer
+- **prompts/db_agent_prompt.py**: System prompts for agents
+- Tools: `validate_query()` and `similar_examples_tool()` available to main agent
+
+**AST Parser & Validation** ([src/ast_parsers/](src/ast_parsers/)):
+- **validator.py**: SQL syntax and schema validation using sqlglot
+- **query_analyzer.py**: AST-based query analysis for structural patterns
+- **llm_tool.py**: Simplified validation interface for agent tool calls
+- **error_codes.py**, **error_context.py**: Structured error handling with canonical tags
+- **models.py**: Pydantic models for validation results
+
+**Vector Database RAG** ([src/query_intent_vectorDB/](src/query_intent_vectorDB/)):
+- **search_similar_query.py**: Semantic search over training examples using ChromaDB
+- **embed_query_intent.py**: Query embedding using sentence-transformers
+- **process_query_intent.py**: AST-based query intent extraction
+- Uses `all-MiniLM-L6-v2` for embeddings, stored in [src/chroma_db/](src/chroma_db/)
+
+**Entry Points:**
+- **sequel2sql.py**: Web interface via `agent.to_web()` (http://localhost:8000)
+- **src/agent/sqlagent.py**: Direct pipeline execution with test cases
+
+**Benchmarking** ([benchmark/](benchmark/)):
+- BIRD-CRITIC PostgreSQL benchmark runner (530 queries)
+- Smart API key rotation, checkpointing, Docker-based evaluation
+- See [benchmark/README.md](benchmark/README.md) for details
+
+### Key Dependencies
+
+- **pydantic-ai**: Agent framework and LLM orchestration
+- **google-genai**: Gemini API access (`gemini-3-flash-preview` model)
+- **chromadb**: Vector database for semantic search
+- **sentence-transformers**: Query embedding (`all-MiniLM-L6-v2`)
+- **sqlglot**: SQL parsing and AST analysis
+- **logfire**: Optional observability and monitoring
+- **uvicorn**: ASGI server for web interface
+
+### Important Implementation Details
+
+**Pipeline Execution Flow** ([src/agent/sqlagent.py](src/agent/sqlagent.py)):
+- `run_pipeline()` is the main async orchestration function
+- Validation happens deterministically BEFORE agent calls (not as agent tool)
+- Syntax fixing uses a separate agent with up to 3 retries
+- Few-shot examples retrieved using AST-based semantic search
+- Final agent call includes: query intent, validated SQL, and similar examples
+
+**Validation Strategy**:
+- Schema files stored in [benchmark/data/schemas/](benchmark/data/schemas/) as JSON
+- Validation uses sqlglot parser with PostgreSQL dialect
+- Returns structured errors with canonical tags (e.g., `SYNTAX_ERROR`, `SCHEMA_ERROR`)
+- See [src/ast_parsers/llm_tool.py](src/ast_parsers/llm_tool.py) for validation interface
+
+**Vector Database**:
+- ChromaDB collection: `query_intents`
+- Documents indexed by AST-based query structure, not just raw SQL text
+- Semantic search uses query intent + structural similarity
+- Database persisted in [src/chroma_db/](src/chroma_db/)
 
 ## Code Style Guidelines
 

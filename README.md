@@ -1,7 +1,10 @@
 # Sequel2SQL
 
 <p align="center">
-    <img src="assets/logo.png" alt="Logo" border="0">
+    <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png">
+        <img alt="Switcher for light and dark mode" src="assets/logo.png">
+    </picture>
     <br>An agentic LLM + RAG framework for PostgreSQL error diagnosis, optimization, and correction.
 </p>
 
@@ -53,15 +56,6 @@ Sequel2SQL uses retrieval-augmented generation and agent-based workflows by leve
     <img src="assets/flowchart.jpg" alt="Product Screenshot">
 </p>
 
-## Docker Setup
-
-A Docker Compose stack provides SQL engine versions used by **BIRD-Critic**, **Spider 1.0/2.0**, with support for **PostgreSQL 14.12**, **MySQL 8.4.0**, **Oracle 19c**, and **SQL Server 2022**.
-
-```bash
-docker compose -f docker/docker-compose.yml up -d postgres
-```
-
-See **[docker/README.md](docker/README.md)** for detailed engine versions, connection strings, and usage instructions.
 
 ## Installation
 
@@ -72,15 +66,44 @@ git clone https://github.com/SVijayB/sequel2sql
 cd sequel2sql
 ```
 
-### Prerequisites
+### Quick Setup (Recommended)
+
+Use the interactive setup script to configure everything automatically:
+
+```bash
+uv run python setup.py
+```
+
+This will guide you through:
+- Installing dependencies
+- Configuring API keys
+- Setting up Docker containers
+- Verifying database connectivity
+
+For advanced options:
+
+```bash
+uv run python setup.py --help
+```
+
+```
+usage: setup.py [-h] [--benchmark] [--skip-docker] [--skip-prompts] [--api-key API_KEY] [--check-only]
+
+options:
+  --benchmark        Setup for full benchmark (includes data validation)
+  --skip-docker      Skip Docker container setup
+  --skip-prompts     Non-interactive mode (use defaults)
+  --api-key API_KEY  Google API key (avoids prompting)
+  --check-only       Run pre-flight checks only, don't setup
+```
+
+### Manual Setup
 
 This project uses [uv](https://github.com/astral-sh/uv) for fast, reliable Python package management. Install it with:
 
 ```bash
 pip install uv
 ```
-
-### Setup
 
 Install dependencies:
 

@@ -45,6 +45,15 @@ def execute_sql(ctx: RunContext[AgentDeps], sql: str) -> DBQueryResponse:
     Raises:
         ModelRetry: If the query is not a SELECT statement (guides agent to retry)
     """
+    _SYSTEM_CATALOGS = ("information_schema", "pg_catalog", "pg_toast")
+    sql_lower = sql.lower()
+    if any(catalog in sql_lower for catalog in _SYSTEM_CATALOGS):
+        raise ModelRetry(
+            "System catalog tables (information_schema, pg_catalog) are not "
+            "accessible. Use the describe_database_schema tool instead to "
+            "discover tables and columns."
+        )
+
     try:
         result = ctx.deps.database.execute_sql(sql)
     except InvalidQueryError as e:

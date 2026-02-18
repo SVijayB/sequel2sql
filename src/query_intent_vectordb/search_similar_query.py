@@ -216,7 +216,7 @@ def select_diverse_examples_from_chroma_results(
 
 def find_similar_examples(
     intent: str,
-    sql_query: str,
+    #sql_query: str,
     n_results: int = 6,
 ) -> List[FewShotExample]:
     """
@@ -224,12 +224,12 @@ def find_similar_examples(
     Returns structured Pydantic models (no printing).
     """
 
-    # Optional structural analysis of input query
-    try:
-        ast = sqlglot.parse_one(sql_query, read="postgres")
-        analyze_query(ast)
-    except Exception as e:
-        logger.warning(f"SQL analysis failed: {e}")
+    # # Optional structural analysis of input query
+    # try:
+    #     ast = sqlglot.parse_one(sql_query, read="postgres")
+    #     analyze_query(ast)
+    # except Exception as e:
+    #     logger.warning(f"SQL analysis failed: {e}")
 
     # Embed intent
     model = SentenceTransformer(EMBEDDING_MODEL)

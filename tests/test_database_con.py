@@ -82,7 +82,7 @@ def example_3_custom_connection():
     deps = get_database_deps(
         database_name="formula_1_template",
         host="localhost",
-        port=5432,
+        port=5433,
         user="root",
         password="123123",
         max_return_values=100,  # Return fewer results
