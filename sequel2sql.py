@@ -56,7 +56,10 @@ except Exception as e:
 # Web Application
 # =============================================================================
 
-app = webui_agent.to_web(deps=deps)
+app = webui_agent.to_web(
+    deps=deps,
+    models=[webui_agent.model, "google-gla:gemini-3-flash-preview"],
+)
 
 if __name__ == "__main__":
     import uvicorn

@@ -15,6 +15,7 @@ import sqlglot
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.mistral import MistralModel
 from sqlglot import exp
 
 # Add both project root and src/ to sys.path for imports to work
@@ -184,14 +185,14 @@ class SQLAnalysisContext(BaseModel):
 
 # Default agent
 agent = Agent(
-    "google-gla:gemini-3-flash-preview",
+    MistralModel('mistral-large-latest'),
     deps_type=AgentDeps,
     system_prompt=BENCHMARK_PROMPT,
 )
 
 # Web UI agent
 webui_agent = Agent(
-    "google-gla:gemini-3-flash-preview",
+    MistralModel('mistral-large-latest'),
     deps_type=AgentDeps,
     system_prompt=WEBUI_PROMPT,
 )
@@ -205,7 +206,7 @@ SYNTAX_FIXER_PROMPT = (
 )
 
 syntax_fixer_agent = Agent(
-    "google-gla:gemini-3-flash-preview",
+    MistralModel('mistral-large-latest'),
     system_prompt=SYNTAX_FIXER_PROMPT,
     output_type=str,
 )
