@@ -263,7 +263,7 @@ def similar_examples_tool(
 
 
 @agent.tool
-async def analyze_and_fix_sql(
+def analyze_and_fix_sql(
     ctx: RunContext[AgentDeps],
     issue_sql: str,
     query_intent: str,
