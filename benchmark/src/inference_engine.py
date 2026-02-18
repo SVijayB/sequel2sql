@@ -21,6 +21,7 @@ from .api_client import LLMClient
 from .checkpoint_manager import CheckpointManager
 from .logger_config import get_logger
 from .prompt_generator import load_prompts
+from .sequel2sql_client import Sequel2SQLClient
 
 
 class InferenceEngine:
@@ -74,8 +75,12 @@ class InferenceEngine:
         prompt = data["prompt"]
 
         try:
-            # Call API
-            response = self.api_client.call_api(prompt)
+            # Sequel2SQL pipeline client takes full task data (db_id + query)
+            # rather than a pre-built prompt string
+            if isinstance(self.api_client, Sequel2SQLClient):
+                response = self.api_client.call_api_with_data(data)
+            else:
+                response = self.api_client.call_api(prompt)
 
             # Create result
             result = {**data, "response": response, "_index": index}

@@ -18,7 +18,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Add src to path
+# Add benchmark/src to path so benchmark modules are importable as 'src.*'
+# (benchmark/src is loaded as the 'src' package from CWD=benchmark/)
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.api_client import LLMClient
@@ -37,6 +38,7 @@ from src.inference_engine import InferenceEngine
 from src.logger_config import get_logger, setup_logger
 from src.post_processor import process_responses_file
 from src.prompt_generator import generate_prompts_from_file
+from src.sequel2sql_client import Sequel2SQLClient
 from src.ui import (
     ask_provider,
     ask_subset_size,
@@ -491,7 +493,11 @@ def main():
 
     try:
         # Initialize LLM client
-        api_client = LLMClient(model_config)
+        # Sequel2SQL uses its own agentic pipeline — no external API client needed
+        if model_config.get("no_api_key"):
+            api_client = Sequel2SQLClient(model_config)
+        else:
+            api_client = LLMClient(model_config)
 
         # Initialize inference engine (sequential processing)
         inference_engine = InferenceEngine(

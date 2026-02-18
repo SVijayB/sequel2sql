@@ -22,6 +22,12 @@ PROVIDERS = {
         "model_id": "mistral:mistral-large-latest",
         "display_name": "Mistral Large Latest",
     },
+    "sequel2sql": {
+        "model_id": "sequel2sql:pipeline",
+        "display_name": "Sequel2SQL Pipeline",
+        # No API key needed — uses DEFAULT_MODEL from sqlagent.py
+        "no_api_key": True,
+    },
 }
 
 DEFAULT_PROVIDER = "mistral"
@@ -39,14 +45,18 @@ def load_api_key(provider: str) -> str:
     Load a single API key for the given provider from environment variables.
 
     Args:
-        provider: "google" or "mistral"
+        provider: "google", "mistral", or "sequel2sql"
 
     Returns:
-        API key string
+        API key string, or empty string for providers that don't need one
 
     Raises:
         SystemExit: If .env file doesn't exist or the key is missing
     """
+    # sequel2sql uses the agent pipeline — no external API key needed here
+    if PROVIDERS.get(provider, {}).get("no_api_key"):
+        return ""
+
     if not ENV_PATH.exists():
         print(f"\n❌ Error: .env file not found at {ENV_PATH}")
         print(f"\n💡 Please create a .env file from the template:")
@@ -133,12 +143,17 @@ def get_model_config(provider: Optional[str] = None) -> Dict[str, Any]:
         print(f"   Supported providers: {', '.join(PROVIDERS.keys())}")
         sys.exit(1)
 
+    provider_entry = PROVIDERS[provider]
     config = {
         **RUN_CONFIG,
         "provider": provider,
-        "model_id": PROVIDERS[provider]["model_id"],
-        "display_name": PROVIDERS[provider]["display_name"],
+        "model_id": provider_entry["model_id"],
+        "display_name": provider_entry["display_name"],
     }
+    # Forward any extra provider-level flags (e.g. no_api_key for sequel2sql)
+    for key, value in provider_entry.items():
+        if key not in ("model_id", "display_name"):
+            config.setdefault(key, value)
     return config
 
 
