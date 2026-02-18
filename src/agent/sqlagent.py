@@ -33,6 +33,12 @@ from src.query_intent_vectordb.search_similar_query import (  # noqa: E402
     FewShotExample,
     find_similar_examples,
 )
+from src.skills.generic_skills import (  # noqa: E402
+    get_error_taxonomy_skill as _get_taxonomy_skill,
+)
+from src.skills.generic_skills import (
+    update_taxonomy_skill,
+)
 
 load_dotenv()
 
@@ -158,10 +164,14 @@ class SQLAnalysisContext(BaseModel):
 
     # Validation results
     has_errors: bool
-    validation_errors: List[dict]  # [{tag: "SYNTAX_ERROR", message: "..."}]
+    # Each dict: {tag, message, taxonomy_category}
+    validation_errors: List[dict]
 
     # Few-shot examples
     similar_examples: List[dict]  # [{sql: "...", intent: "...", explanation: "..."}]
+
+    # Taxonomy skill guidance (populated when errors have a known category)
+    taxonomy_skill_guidance: Optional[str] = None
 
     # Metadata
     query_intent: str
@@ -334,15 +344,35 @@ def analyze_and_fix_sql(
         for ex in examples
     ]
 
+    # Step 4: Look up taxonomy skill guidance for the first categorised error
+    validation_errors_formatted = [
+        {
+            "tag": err.tag,
+            "message": err.message,
+            "taxonomy_category": err.taxonomy_category,
+        }
+        for err in validation_errors
+    ]
+
+    taxonomy_skill_guidance: Optional[str] = None
+    for err in validation_errors:
+        if err.taxonomy_category:
+            guidance = _get_taxonomy_skill(err.taxonomy_category)
+            # Only use it if a real skill file was found
+            if not guidance.startswith("No skill file") and not guidance.startswith(
+                "Skill file"
+            ):
+                taxonomy_skill_guidance = guidance
+            break
+
     return SQLAnalysisContext(
         database_id=db_id,
         available_tables=available_tables,
         schema_description=schema_description,
         has_errors=(len(validation_errors) > 0),
-        validation_errors=[
-            {"tag": err.tag, "message": err.message} for err in validation_errors
-        ],
+        validation_errors=validation_errors_formatted,
         similar_examples=similar_examples_formatted,
+        taxonomy_skill_guidance=taxonomy_skill_guidance,
         query_intent=query_intent,
         dialect=dialect,
     )
@@ -374,11 +404,57 @@ def describe_database_schema(
     )
 
 
+@agent.tool_plain
+def get_error_taxonomy_skill(error_category: str) -> str:
+    """
+    Look up best-practice approaches for fixing a SQL error of
+    the given taxonomy category.
+
+    Call this BEFORE attempting to fix any categorized error.
+    Pass the taxonomy_category from a ValidationErrorOut
+    (e.g. "join_related", "syntax", "aggregation", "semantic").
+
+    Returns a markdown guide with core approaches and any
+    previously learned examples from confirmed past fixes.
+    """
+    return _get_taxonomy_skill(error_category)
+
+
+@agent.tool_plain
+def record_taxonomy_fix(
+    category: str,
+    original_sql: str,
+    fixed_sql: str,
+    approach_description: str,
+) -> str:
+    """
+    Record a confirmed successful SQL fix for future reference.
+
+    Call this ONLY after the user has confirmed the fix is correct.
+    Do not call it speculatively or before user confirmation.
+
+    Args:
+            category: taxonomy_category from the ValidationErrorOut
+                      (e.g. "join_related", "syntax", "aggregation").
+            original_sql: The broken SQL query.
+            fixed_sql: The corrected SQL query.
+            approach_description: One sentence describing what was fixed.
+
+    Returns:
+            "recorded" if saved successfully, "skipped" if category
+            unknown or file missing.
+    """
+    ok = update_taxonomy_skill(category, original_sql, fixed_sql, approach_description)
+    return "recorded" if ok else "skipped"
+
+
 webui_agent.tool(name="execute_sql_query")(execute_sql_query)
 webui_agent.tool_plain(name="validate_query")(validate_query)
 webui_agent.tool_plain(name="find_similar_examples")(similar_examples_tool)
 webui_agent.tool(name="analyze_and_fix_sql")(analyze_and_fix_sql)
 webui_agent.tool(name="describe_database_schema")(describe_database_schema)
+webui_agent.tool_plain(name="get_error_taxonomy_skill")(get_error_taxonomy_skill)
+webui_agent.tool_plain(name="record_taxonomy_fix")(record_taxonomy_fix)
 
 
 # =============================================================================

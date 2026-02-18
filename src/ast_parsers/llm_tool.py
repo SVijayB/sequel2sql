@@ -2,14 +2,20 @@
 """Simplified SQL validation for LLM agent tool calls."""
 
 import json
+import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
-from ast_parsers.validator import validate_syntax, validate_schema
-from ast_parsers.models import ValidationErrorOut
+from ast_parsers.models import ValidationResultOut
+from ast_parsers.validator import validate_schema, validate_syntax
 
-# Path to schema JSON files
-SCHEMA_DIR = Path(__file__).parent.parent.parent / "benchmark" / "data" / "schemas"
+# Path to schema JSON files - supports SEQUEL2SQL_SCHEMA_DIR env var override
+SCHEMA_DIR = Path(
+    os.getenv(
+        "SEQUEL2SQL_SCHEMA_DIR",
+        Path(__file__).parent.parent.parent / "benchmark" / "data" / "schemas",
+    )
+)
 
 
 def _load_schema(db_name: str) -> Optional[Dict[str, Dict[str, str]]]:
@@ -25,8 +31,8 @@ def validate_sql(
     sql: str,
     db_name: Optional[str] = None,
     dialect: str = "postgres",
-) -> List[ValidationErrorOut]:
-    """Validate SQL syntax and optionally schema, returning only errors.
+) -> ValidationResultOut:
+    """Validate SQL syntax and optionally schema, returning validation result with valid flag.
 
     Args:
         sql: SQL query string to validate.
@@ -35,24 +41,15 @@ def validate_sql(
         dialect: SQL dialect (default: "postgres").
 
     Returns:
-        List of ValidationErrorOut. Empty list means the SQL is valid.
+        ValidationResultOut with valid flag and errors list.
+        - valid=True means no errors detected
+        - valid=False means errors were found (check errors list)
     """
     schema = _load_schema(db_name) if db_name else None
-    
+
     if schema is not None:
         result = validate_schema(sql, schema, dialect=dialect)
     else:
         result = validate_syntax(sql, dialect=dialect)
 
-    return [
-        ValidationErrorOut(
-            tag=e.tag,
-            message=e.message,
-            location=e.location,
-            context=e.context,
-            error_code=e.error_code,
-            taxonomy_category=e.taxonomy_category,
-            affected_clauses=e.affected_clauses or [],
-        )
-        for e in result.errors
-    ]
+    return ValidationResultOut.from_validation_result(result)
