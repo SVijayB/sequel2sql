@@ -395,6 +395,16 @@ def main():
                     run_action = show_run_details_and_confirm(selected_run)
 
                     if run_action == "resume":
+                        # Ask which model to use for this resumed run
+                        selected_provider = ask_provider(PROVIDERS)
+                        if selected_provider is None:
+                            break
+                        try:
+                            validate_config(selected_provider)
+                            model_config = get_model_config(selected_provider)
+                        except SystemExit:
+                            break
+
                         # Resume this run
                         timestamp = selected_run["timestamp"]
                         logger = setup_logger(f"{timestamp}_resumed")

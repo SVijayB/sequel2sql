@@ -1,6 +1,5 @@
 """LLM API client backed by pydantic-ai (Google Gemma 3 27B / Mistral Large)"""
 
-import asyncio
 import os
 import time
 from typing import Any, Dict
@@ -89,9 +88,10 @@ class LLMClient:
         for attempt in range(1, max_retries + 1):
             try:
                 self.total_requests += 1
-                result = asyncio.run(self._run_async(prompt))
+                result = self.agent.run_sync(prompt)
                 self.successful_requests += 1
-                return result
+                time.sleep(1)  # respect 1 req/sec rate limit
+                return str(result.output)
 
             except Exception as e:
                 last_error = e
@@ -119,11 +119,6 @@ class LLMClient:
             f"❌ API call failed after {max_retries} attempts. Last error: {str(last_error)[:120]}"
         )
         raise RuntimeError(f"API call failed after {max_retries} retries: {last_error}")
-
-    async def _run_async(self, prompt: str) -> str:
-        """Run pydantic-ai agent asynchronously and return the text output."""
-        result = await self.agent.run(prompt)
-        return str(result.output)
 
     def get_statistics(self) -> Dict[str, Any]:
         """Get usage statistics."""

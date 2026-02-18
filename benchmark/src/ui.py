@@ -16,7 +16,7 @@ console = Console()
 
 def display_logo() -> None:
     """Display the SEQUEL2SQL benchmark logo."""
-    f = Figlet(font="big")
+    f = Figlet(font="ansi_shadow", width=100)
     logo = f.renderText("SEQUEL2SQL")
 
     console.print()
@@ -24,7 +24,7 @@ def display_logo() -> None:
         Panel(
             f"[bold cyan]{logo}[/bold cyan]\n"
             f"[bold white]BENCHMARK EVALUATION SYSTEM[/bold white]\n"
-            f"[dim]PostgreSQL SQL Generation Benchmark[/dim]",
+            f"[dim]BIRD-CRITIC BENCHMARK[/dim]",
             border_style="cyan",
             padding=(1, 2),
         )
@@ -69,9 +69,13 @@ def get_previous_runs(outputs_dir: Path) -> List[Dict[str, Any]]:
             phase = checkpoint.get("phase", "unknown")
 
             # Determine status
-            if completed >= total:
+            eval_done = checkpoint.get("evaluation_completed", False)
+            if completed >= total and eval_done:
                 status = "✓ Completed"
                 is_resumable = False
+            elif completed >= total and not eval_done:
+                status = "⏸ Eval Pending"
+                is_resumable = True
             else:
                 status = "⏸ Incomplete"
                 is_resumable = True
@@ -183,7 +187,7 @@ def show_previous_runs_menu(runs: List[Dict[str, Any]]) -> Optional[Dict[str, An
 
     # Create choices list
     choices = []
-    for run in runs:
+    for i, run in enumerate(runs):
         timestamp = run["timestamp"]
         completed = run["completed"]
         total = run["total"]
@@ -197,15 +201,18 @@ def show_previous_runs_menu(runs: List[Dict[str, Any]]) -> Optional[Dict[str, An
             display_time = timestamp
 
         choice_text = f"{status}  {display_time}  ({completed}/{total} queries)"
-        choices.append(questionary.Choice(choice_text, value=run))
+        choices.append(questionary.Choice(choice_text, value=i))
 
-    choices.append(questionary.Choice("⬅ Back to main menu", value=None))
+    choices.append(questionary.Choice("⬅ Back to main menu", value=-1))
 
     answer = questionary.select(
         "Select a run to view details or resume:", choices=choices
     ).ask()
 
-    return answer
+    if answer is None or answer == -1:
+        return None
+
+    return runs[answer]
 
 
 def show_run_details_and_confirm(run: Dict[str, Any]) -> str:
