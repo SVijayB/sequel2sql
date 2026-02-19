@@ -120,12 +120,14 @@ Run the application:
 ```bash
 uv run python sequel2sql.py
 ```
-
+<!-- 
 ### Project demo
 
 ![Project demo](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMTJlODMxMDg0ZWJjOGFmNTdjYzczZTMwZTIyNzM3YTExZWMxMzM2OCZjdD1n/wwg1suUiTbCY8H8vIA/giphy-downsized-large.gif)
 
 You can also find the demo video [here](https://www.youtube.com/watch?v=dQw4w9WgXcQ).
+
+-->
 
 ## Contributing
 
@@ -140,3 +142,9 @@ Sequel2SQL is under The MIT License. Read the [LICENSE](https://github.com/SVija
 ---
 
 <img src="assets/footercredits.png" width = "600px">
+
+<!-- 
+This is also a comment
+that spans multiple lines. 
+-->
+
