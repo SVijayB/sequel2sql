@@ -36,6 +36,17 @@ from src.query_intent_vectordb.search_similar_query import (  # noqa: E402
 
 load_dotenv()
 
+# =============================================================================
+# Model Configuration
+# =============================================================================
+
+# Supported models — add new ones here
+SUPPORTED_MODELS = {
+    "mistral": "mistral:mistral-large-latest",
+    "google": "google-gla:gemini-3-flash-preview",
+}
+DEFAULT_MODEL = "mistral:mistral-large-latest"
+
 
 # Logfire configuration (make sure to set LOGFIRE_TOKEN in .env for logging to work)
 logfire.configure(send_to_logfire="if-token-present")
@@ -174,14 +185,14 @@ class SQLAnalysisContext(BaseModel):
 
 # Default agent
 agent = Agent(
-    "google-gla:gemini-3-flash-preview",
+    DEFAULT_MODEL,
     deps_type=AgentDeps,
     system_prompt=BENCHMARK_PROMPT,
 )
 
 # Web UI agent
 webui_agent = Agent(
-    "google-gla:gemini-3-flash-preview",
+    DEFAULT_MODEL,
     deps_type=AgentDeps,
     system_prompt=WEBUI_PROMPT,
 )
@@ -195,7 +206,7 @@ SYNTAX_FIXER_PROMPT = (
 )
 
 syntax_fixer_agent = Agent(
-    "google-gla:gemini-3-flash-preview",
+    DEFAULT_MODEL,
     system_prompt=SYNTAX_FIXER_PROMPT,
     output_type=str,
 )

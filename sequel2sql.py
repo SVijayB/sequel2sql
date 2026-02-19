@@ -20,7 +20,11 @@ import sys
 
 from dotenv import load_dotenv
 
-from src.agent.sqlagent import get_database_deps, webui_agent
+from src.agent.sqlagent import (
+    SUPPORTED_MODELS,
+    get_database_deps,
+    webui_agent,
+)
 
 # Load environment variables
 load_dotenv()
@@ -56,7 +60,13 @@ except Exception as e:
 # Web Application
 # =============================================================================
 
-app = webui_agent.to_web(deps=deps)
+app = webui_agent.to_web(
+    deps=deps,
+    models={
+        "Mistral Large Latest": SUPPORTED_MODELS["mistral"],
+        "Google Gemini Flash": SUPPORTED_MODELS["google"],
+    },
+)
 
 if __name__ == "__main__":
     import uvicorn
