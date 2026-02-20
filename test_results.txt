@@ -1,0 +1,196 @@
+Testing 20 entries from benchmark
+
+================================================================================
+
+--- PostgreSQL_0 (sql #1) ---
+  SQL (first 120): SELECT account_id, MAX(payments) AS max_payment, MIN(payments) AS min_payment FROM loan GROUP BY account_id HAVING COUNT
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_1 (sql #1) ---
+  SQL (first 120): SELECT CreationDate::time FROM comments;
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_2 (sql #1) ---
+  SQL (first 120): CREATE OR REPLACE FUNCTION total_loans()
+    RETURNS TRIGGER
+    AS $$
+    BEGIN
+        UPDATE loan_summary
+        SET
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_2 (sql #2) ---
+  SQL (first 120): CREATE TRIGGER tr_total_loans AFTER UPDATE OF status FOR EACH ROW EXECUTE PROCEDURE total_loans();
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_3 (sql #1) ---
+  SQL (first 120): CREATE UNIQUE INDEX unique_name ON event(event_name, event_date) where event_name is not null;CREATE UNIQUE INDEX unique
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_4 (sql #1) ---
+  SQL (first 120): UPDATE transactions_1k
+    SET Amount = 100
+    FROM ( SELECT TransactionID FROM transactions_1k WHERE Amount = 50 ORDER
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_5 (sql #1) ---
+  SQL (first 120): SELECT users.Id, COUNT(posts.Id) as answered FROM users LEFT JOIN posts ON users.Id = posts.OwnerUserId GROUP BY users.I
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_6 (sql #1) ---
+  SQL (first 120): DROP TABLE IF EXISTS users;
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_7 (sql #1) ---
+  SQL (first 120): SELECT  ARRAY_AGG(DISTINCT u.id) AS ids, ARRAY_AGG(DISTINCT u.username) AS usernames, ARRAY_AGG(DISTINCT u.ref1) AS refs
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_8 (sql #1) ---
+  SQL (first 120): WITH CTE AS ( SELECT link_to_event, COUNT(link_to_member) AS count FROM attendance GROUP BY link_to_event ) SELECT CTE.l
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_9 (sql #1) ---
+  SQL (first 120): INSERT INTO attendance VALUES ('recEVTik3MlqbvLFi', 'rec280Sk7o31iG0Tx', 1)
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_10 (sql #1) ---
+  SQL (first 120): UPDATE account
+    SET date__timestamp = date__bigint::timestamp;
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_11 (sql #1) ---
+  SQL (first 120): SELECT * FROM cards GROUP BY artist;
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_12 (sql #1) ---
+  SQL (first 120): IF SELECT * FROM transactions_1k WHERE CustomerID = 3 AND Date = '2012-08-24' RETURNS NO ROWS
+THEN SELECT * FROM transac
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_13 (sql #1) ---
+  SQL (first 120): SELECT 'SELECT ' || array_to_string(ARRAY(SELECT 'o' || '.' || c.column_name
+    FROM information_schema.columns As c
+  
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_14 (sql #1) ---
+  SQL (first 120): (
+  SELECT
+    account.account_id,
+    account.frequency,
+    l.loan_id,
+    l.date AS loan_date,
+    0 AS priority
+  FR
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_15 (sql #1) ---
+  SQL (first 120): SELECT Array_agg(rw) FROM (SELECT link_to_event, (SELECT To_(Array_agg(Row_to_(t))) FROM (SELECT link_to_member FROM pub
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_16 (sql #1) ---
+  SQL (first 120): SELECT to_char(generate_series, 'YYYY') FROM generate_series(MIN(date)::timestamptz, MAX(date)::timestamptz, '1 year') F
+  llm_tool errors count: 1
+  llm_tool inferred valid: False
+  validate_syntax .valid: False
+  validate_syntax errors: 1
+    - [syntax_invalid_token] Invalid expression / Unexpected token. Line 1, Col: 123.
+  rate_series, 'YYYY') FROM generate_series(MIN(date)::timestamptz, MAX(date)::timestamptz, '1 year') [4mFROM[0m loan;
+    LLM tool err: [syntax_invalid_token] Invalid expression / Unexpected token. Line 1, Col: 123.
+  rate_series, 'YYYY') FROM generate_series(MIN(date)::timestamptz, MAX(date)::timestamptz, '1 year') [4mFROM[0m loan;
+
+--- PostgreSQL_17 (sql #1) ---
+  SQL (first 120): SELECT account_id, amount FROM (SELECT account_id, amount, ROW_NUMBER() OVER(PARTITION BY account_id ORDER BY amount DES
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_18 (sql #1) ---
+  SQL (first 120): CREATE TABLE client_information ( client_id smallserial NOT NULL, first_name character varying(50), last_name character 
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+--- PostgreSQL_19 (sql #1) ---
+  SQL (first 120): INSERT INTO cards(uuid, name) VALUES ('5f8287b1-5bb6-5f4c-ad17-316a40d5bb0c', 'Ancestor''s Chosen') ON CONFLICT DO NOTHI
+  llm_tool errors count: 0
+  llm_tool inferred valid: True
+  validate_syntax .valid: True
+  validate_syntax errors: 0
+  *** ISSUE: This is issue SQL but validate_sql says VALID! ***
+
+================================================================================
+
+Summary: 20/21 issue SQLs were reported as VALID (likely wrong)

@@ -1,0 +1,410 @@
+[
+  {
+    "query_idx": 17,
+    "db_id": "financial",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 123.\n  rate_series, 'YYYY') FROM generate_series(MIN(date)::timestamptz, MAX(date)::timestamptz, '1 year') \u001b[4mFROM\u001b[0m loan;",
+    "error_tokens": 64,
+    "issue_sql_tokens": 41
+  },
+  {
+    "query_idx": 25,
+    "db_id": "codebase_community",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 83.\n  SELECT (select r.relname from pg_class r where r.oid = c.confrelid) as base_table,\u001b[4m\\\u001b[0mn       a.attname as base_col,\\n       (select r.relname from pg_class r where r.oid = c.conrelid) a",
+    "error_tokens": 91,
+    "issue_sql_tokens": 201
+  },
+  {
+    "query_idx": 28,
+    "db_id": "financial",
+    "valid": false,
+    "error_message": "The number of provided arguments (2) is greater than the maximum number of supported arguments (1). Line 1, Col: 270.\n  NT(*) as loan_count FROM loan ORDER BY timeTwo ) SELECT timeOne as year, SUM(trans_count, loan_count\u001b[4m)\u001b[0m as count FROM one, two ORDER BY 1;",
+    "error_tokens": 82,
+    "issue_sql_tokens": 87
+  },
+  {
+    "query_idx": 33,
+    "db_id": "financial",
+    "valid": false,
+    "error_message": "Expecting ). Line 8, Col: 71.\n  ma.table\n), ranked_visits AS (\n    SELECT *, ROW_NUMBER() OVER(PARTITION BY CONCAT(ivm_arr[2],item) \u001b[4mas\u001b[0m temp ORDER BY type) AS rn\n    FROM tab_with_cardid\n)\nSELECT cardid, pure_cardid\nFROM ranked_visits\n",
+    "error_tokens": 91,
+    "issue_sql_tokens": 117
+  },
+  {
+    "query_idx": 36,
+    "db_id": "codebase_community",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 12.\n  begin \u001b[4minsert\u001b[0m into profiles (Id, CreationDate, WebsiteUrl) select new.Id, new.CreationDate, left(replace(new.Webs",
+    "error_tokens": 59,
+    "issue_sql_tokens": 59
+  },
+  {
+    "query_idx": 38,
+    "db_id": "student_club",
+    "valid": false,
+    "error_message": "Unknown option DO. Line 1, Col: 251.\n  :00', 'Social', 'Annual Gala for club members', 'Grand Ballroom', 'Open') on conflict (event_id) do \u001b[4minsert\u001b[0m into failure (event, member) values ('recAlAwtBZ0Fqbr5K', 'rec280Sk7o31iG0Tx');",
+    "error_tokens": 92,
+    "issue_sql_tokens": 124
+  },
+  {
+    "query_idx": 74,
+    "db_id": "codebase_community",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 2, Col: 17.\n  select posttypeid\n        case \u001b[4mwhen\u001b[0m tags like ('%bayesian%','%distributions%')\n        then 1 else 0 end as keyword_count\n        from ",
+    "error_tokens": 64,
+    "issue_sql_tokens": 37
+  },
+  {
+    "query_idx": 75,
+    "db_id": "toxicology",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 98.\n  SELECT count(bond_id), molecule_id FROM bond GROUP BY molecule_id ORDER BY molecule_id \u001b[4mlast_update\u001b[0m DESC;",
+    "error_tokens": 55,
+    "issue_sql_tokens": 28
+  },
+  {
+    "query_idx": 94,
+    "db_id": "card_games",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 2, Col: 23.\n  SELECT set_translations.language\n              CASE \u001b[4mWHEN\u001b[0m set_translations.language IN (SELECT foreign_data.language in foreign_data)\n              THEN 'com",
+    "error_tokens": 61,
+    "issue_sql_tokens": 51
+  },
+  {
+    "query_idx": 111,
+    "db_id": "european_football_2",
+    "valid": false,
+    "error_message": "Expecting (. Line 1, Col: 108.\n  ITH TAB AS (SELECT id as league_id, name FROM League UNION SELECT id, name FROM League) , RECURSIVE \u001b[4mrecuree\u001b[0m AS ( SELECT league_id, name FROM TAB UNION SELECT E.league_id, E.name FROM TAB E JOIN recuree S ON ",
+    "error_tokens": 85,
+    "issue_sql_tokens": 77
+  },
+  {
+    "query_idx": 123,
+    "db_id": "superhero",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 48.\n  UPDATE superhero SET full_name = 'Superman' \u001b[4mJOIN\u001b[0m team_member_superhero ON superhero.id = team_member_superhero.superhero_id JOIN team_member ON team",
+    "error_tokens": 67,
+    "issue_sql_tokens": 66
+  },
+  {
+    "query_idx": 141,
+    "db_id": "financial",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 26.\n  DROP TABLE IF EXISTS card\u001b[4m,\u001b[0m account, disp;CREATE TABLE account (account_id INT PRIMARY KEY NOT NULL, district_id INT NOT NULL, ",
+    "error_tokens": 58,
+    "issue_sql_tokens": 126
+  },
+  {
+    "query_idx": 142,
+    "db_id": "financial",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 207.\n  _id', client.client_id, 'gender', client.gender, 'birth_date', client.birth_date) END), '[]') AS AS \u001b[4mclients\u001b[0m FROM client;",
+    "error_tokens": 67,
+    "issue_sql_tokens": 67
+  },
+  {
+    "query_idx": 145,
+    "db_id": "formula_1",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 19.\n  SELECT raceid mode\u001b[4m(\u001b[0m) within group(order by laps) as modal_laps FROM results;",
+    "error_tokens": 47,
+    "issue_sql_tokens": 20
+  },
+  {
+    "query_idx": 160,
+    "db_id": "formula_1",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 3, Col: 4.\n  SELECT *\nFROM jsonb_to_record(circuit_id_name) AS x(circuitid int, name text)\n\u001b[4mFROM\u001b[0m circuit_json;",
+    "error_tokens": 61,
+    "issue_sql_tokens": 36
+  },
+  {
+    "query_idx": 188,
+    "db_id": "card_games",
+    "valid": false,
+    "error_message": "Unbalanced parentheses or brackets",
+    "error_tokens": 6,
+    "issue_sql_tokens": 81
+  },
+  {
+    "query_idx": 224,
+    "db_id": "superhero",
+    "valid": false,
+    "error_message": "Expecting an aggregation function in PIVOT. Line 1, Col: 103.\n  SELECT superhero_name, performance_date, attribute_name, result FROM superhero_performance PIVOT(\u001b[4mresult\u001b[0m FOR attribute_name IN (Strength, Speed, Intelligence))",
+    "error_tokens": 66,
+    "issue_sql_tokens": 36
+  },
+  {
+    "query_idx": 225,
+    "db_id": "thrombosis_prediction",
+    "valid": false,
+    "error_message": "Unterminated quoted string",
+    "error_tokens": 5,
+    "issue_sql_tokens": 59
+  },
+  {
+    "query_idx": 233,
+    "db_id": "esophageal",
+    "valid": false,
+    "error_message": "Expected type. Line 1, Col: 39.\n  SELECT coalesce(_agg(patients), '[]'::\u001b[4m)\u001b[0m as patients, coalesce(_agg(doctors), '[]'::) as doctors, coalesce(_agg(appointments), '[]'::) as ap",
+    "error_tokens": 69,
+    "issue_sql_tokens": 74
+  },
+  {
+    "query_idx": 250,
+    "db_id": "erolp",
+    "valid": false,
+    "error_message": "Required keyword: 'this' missing for <class 'sqlglot.expressions.Parameter'>. Line 1, Col: 318.\n  tory > 5 AND Gender = 'Female' AND Language_Proficiency IN ('Basic', 'Intermediate') AND CASE WHEN $\u001b[4m{\u001b[0msocio_status} IN ('Low', 'Middle') THEN Geographic_Location = 'Urban' WHEN ${socio_status} = 'High' ",
+    "error_tokens": 99,
+    "issue_sql_tokens": 124
+  },
+  {
+    "query_idx": 264,
+    "db_id": "global_atlas",
+    "valid": false,
+    "error_message": "Unbalanced parentheses or brackets",
+    "error_tokens": 6,
+    "issue_sql_tokens": 75
+  },
+  {
+    "query_idx": 278,
+    "db_id": "student_club",
+    "valid": false,
+    "error_message": "Failed to parse any statement following CTE. Line 1, Col: 197.\n  nt ), t2 AS ( SELECT e.event_id FROM event e INNEr JOIN attendance a ON e.event_id = a.link_to_event\u001b[4m)\u001b[0m",
+    "error_tokens": 66,
+    "issue_sql_tokens": 68
+  },
+  {
+    "query_idx": 284,
+    "db_id": "european_football_2",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 13.\n  SELEC Player\u001b[4m.\u001b[0mplayer_api_id, Player.player_name, Player_Attributes.overall_rating FROM player LEFT JOIN player_att",
+    "error_tokens": 57,
+    "issue_sql_tokens": 61
+  },
+  {
+    "query_idx": 294,
+    "db_id": "card_games",
+    "valid": false,
+    "error_message": "Expected END after CASE. Line 1, Col: 84.\n  SELECT id, (CASE WHEN (colors = 'W' and power = '4') THEN coalesce(watermark, '996'\u001b[4m)\u001b[0m watermark WHEN (colors = 'B' and power = '3') THEN coalesce(watermark, '997') watermark WHEN (color",
+    "error_tokens": 85,
+    "issue_sql_tokens": 111
+  },
+  {
+    "query_idx": 296,
+    "db_id": "student_club",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 244.\n  ent.event_id WHERE event_date BETWEEN '2019-01-01' AND '2023-12-31' GROUP BY link_to_member [split] \u001b[4mWITH\u001b[0m cte AS ( SELECT link_to_member, DATE(event_date) AS event_day, ROW_NUMBER() OVER (PARTITION BY link",
+    "error_tokens": 106,
+    "issue_sql_tokens": 208
+  },
+  {
+    "query_idx": 303,
+    "db_id": "thrombosis_prediction",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 59.\n  SELECT pt.id, pt.sex, pt.birthday, ex.diagnosis FRM \u001b[4mpatient\u001b[0m pt, examination ex WHERE pt.id = (SELECT ex.id FROM examination ex WHERE ex.diagnosis = 'SLE' AND e",
+    "error_tokens": 74,
+    "issue_sql_tokens": 58
+  },
+  {
+    "query_idx": 305,
+    "db_id": "european_football_2",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 101.\n  UPDATE league l SET name = concat('abc', ',', name) FROM country c WHERE l.country_id = c.id \u001b[4mGROUP BY\u001b[0m l.country_id HAVING l.country_id > 1000;",
+    "error_tokens": 75,
+    "issue_sql_tokens": 47
+  },
+  {
+    "query_idx": 311,
+    "db_id": "financial",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 70.\n  SELECT 5 AS RATES, COUNT(A8) FROM district WHERE A8 = 5 [split] \u001b[4mSELECT\u001b[0m 5 AS RATES, COUNT(A9) FROM district WHERE A9 = 5 [split] SELECT 4 AS RATES, COUNT(A8) FROM district",
+    "error_tokens": 85,
+    "issue_sql_tokens": 130
+  },
+  {
+    "query_idx": 317,
+    "db_id": "student_club",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 48.\n  SELECT * FROM budget GROUP BY link_to_event \u001b[4mWHEN\u001b[0m event_status = 'Closed' THEN 'Closed' WHEN event_status = 'Open' AND event_status = 'Planning' THEN",
+    "error_tokens": 68,
+    "issue_sql_tokens": 74
+  },
+  {
+    "query_idx": 322,
+    "db_id": "codebase_community",
+    "valid": false,
+    "error_message": "Expected table name but got <Token token_type: TokenType.DQMARK, text: ??, line: 1, col: 9, start: 7, end: 8, comments: []>. Line 1, Col: 9.\n  UPDATE \u001b[4m??\u001b[0m = REPLACE(??, 'http://stackoverflow.com', 'https://stackoverflow.com');",
+    "error_tokens": 86,
+    "issue_sql_tokens": 22
+  },
+  {
+    "query_idx": 323,
+    "db_id": "card_games",
+    "valid": false,
+    "error_message": "Required keyword: 'expressions' missing for <class 'sqlglot.expressions.Constraint'>. Line 1, Col: 163.\n  _id int NOT NULL, nested_item_id int, block_id int, \"order\" int NOT NULL, CONSTRAINT not_own_parent \u001b[4mCHECK\u001b[0m nested_item_id <> id)",
+    "error_tokens": 84,
+    "issue_sql_tokens": 54
+  },
+  {
+    "query_idx": 330,
+    "db_id": "student_club",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 1, Col: 95.\n  SELECT s.member_id FROM members AS s WHERE s.position = 'Member' AND s.email @@ angela.sanders\u001b[4m@\u001b[0mlpu.edu;",
+    "error_tokens": 59,
+    "issue_sql_tokens": 34
+  },
+  {
+    "query_idx": 354,
+    "db_id": "card_games",
+    "valid": false,
+    "error_message": "Unbalanced parentheses or brackets",
+    "error_tokens": 6,
+    "issue_sql_tokens": 105
+  },
+  {
+    "query_idx": 369,
+    "db_id": "codebase_community",
+    "valid": false,
+    "error_message": "Expected ]. Line 5, Col: 79.\n  \n  id,\n  displayname,\n  age,\n  SUM(date_part('day', lastaccessdate - creationdate) + 1) - [subtract \u001b[4mholidays\u001b[0m] AS TotalDays\nFROM\n  users\nGROUP BY\n  displayname, age\nORDER BY\n  users.id;",
+    "error_tokens": 89,
+    "issue_sql_tokens": 67
+  },
+  {
+    "query_idx": 379,
+    "db_id": "superhero",
+    "valid": false,
+    "error_message": "Error tokenizing 'alignment_name LIKE '%Good%' THEN 'Y' ELSE 'N' EN'",
+    "error_tokens": 22,
+    "issue_sql_tokens": 39
+  },
+  {
+    "query_idx": 393,
+    "db_id": "toxicology",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 7, Col: 29.\n  a.\"atom_id\" = c.\"atom_id\"\nINNER JOIN \"bond\" b ON c.\"bond_id\" = b.\"bond_id\"\nGROUP BY m.\"molecule_id\" \u001b[4mINTO\u001b[0m :result_variable",
+    "error_tokens": 76,
+    "issue_sql_tokens": 114
+  },
+  {
+    "query_idx": 402,
+    "db_id": "student_club",
+    "valid": false,
+    "error_message": "Required keyword: 'format' missing for <class 'sqlglot.expressions.TimeToStr'>. Line 2, Col: 17.\n  SELECT\n    TO_CHAR(type\u001b[4m)\u001b[0m AS event_type,\n    COUNT(CASE WHEN EXTRACT(YEAR FROM event_date::timestamp) = recent_year THEN 1 EN",
+    "error_tokens": 80,
+    "issue_sql_tokens": 146
+  },
+  {
+    "query_idx": 412,
+    "db_id": "european_football_2",
+    "valid": false,
+    "error_message": "Expecting ). Line 6, Col: 38.\n  \"match_count\"\nFROM \"match\" MATCH_RECOGNIZE (PARTITION BY \"country_id\"\n                              \u001b[4mORDER BY\u001b[0m \"date\" MEASURES FIRST(\"date\") AS \"start_date\", LAST(\"date\") AS \"end_date\", COUNT(*) AS \"match_count",
+    "error_tokens": 81,
+    "issue_sql_tokens": 121
+  },
+  {
+    "query_idx": 432,
+    "db_id": "european_football_2",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 29, Col: 6.\n   join profit_agg p on l.team_api_id = p.team_api_id\norder by coalesce(p.team_api_id, l.team_api_id)\n\u001b[4mselect\u001b[0m extract(year from to_date(date, 'YYYY-MM-DD HH24:MI:SS')) as year\nfrom team_attributes\nwhere date =",
+    "error_tokens": 107,
+    "issue_sql_tokens": 428
+  },
+  {
+    "query_idx": 437,
+    "db_id": "european_football_2",
+    "valid": false,
+    "error_message": "Expecting ). Line 1, Col: 39.\n  SELECT XMLSERIALIZE(DOCUMENT \u001b[4mXMLELEMENT\u001b[0m(NAME \"files\", XMLAGG(XMLELEMENT(NAME \"file\", XMLFOREST(\"id\" AS \"id\", \"team_long_name\" AS \"team_long",
+    "error_tokens": 72,
+    "issue_sql_tokens": 116
+  },
+  {
+    "query_idx": 441,
+    "db_id": "european_football_2",
+    "valid": false,
+    "error_message": "Expecting ). Line 38, Col: 46.\n  ize\"\n   FROM \"my_table\" t) MATCH_RECOGNIZE(PARTITION BY \"cto\"\n                                      \u001b[4mORDER BY\u001b[0m \"rn\" MEASURES MATCH_NUMBER() AS \"mn\", SUM(\"filesize\") AS \"total_size\" ALL ROWS PER MATCH PATTERN ((",
+    "error_tokens": 81,
+    "issue_sql_tokens": 672
+  },
+  {
+    "query_idx": 445,
+    "db_id": "toxicology",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 14, Col: 20.\n  .\"bond_id\" = \"bond\".\"bond_id\"\nORDER BY \"molecule\".\"molecule_id\",\n         \"atom\".\"atom_id\"\n         \u001b[4m\"connected\"\u001b[0m.\"atom_id2\";",
+    "error_tokens": 71,
+    "issue_sql_tokens": 160
+  },
+  {
+    "query_idx": 446,
+    "db_id": "california_schools",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 2, Col: 26.\n  UPDATE \"frpm\" AS target\n    \u001b[4m\"Charter School (Y/N)\"\u001b[0m = 1000\n   FROM (\n       SELECT DISTINCT \"cdscode\"\n       FROM \"frpm\"\n       WHERE \"Percent (%) Elig",
+    "error_tokens": 77,
+    "issue_sql_tokens": 81
+  },
+  {
+    "query_idx": 450,
+    "db_id": "toxicology",
+    "valid": false,
+    "error_message": "Unbalanced parentheses or brackets",
+    "error_tokens": 6,
+    "issue_sql_tokens": 153
+  },
+  {
+    "query_idx": 475,
+    "db_id": "debit_card_specializing",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 2, Col: 36.\n  T \"customerid\", \"date\", \"productid\", \"amount\" FROM \"transactions_1k\"\nWHERE (\"productid\" IN (2,5,9)) \u001b[4mPIVOT\u001b[0m(COUNT(\"amount\") FOR productid IN (2, 5, 9)) AS pivot_table;",
+    "error_tokens": 90,
+    "issue_sql_tokens": 63
+  },
+  {
+    "query_idx": 477,
+    "db_id": "superhero",
+    "valid": false,
+    "error_message": "Required keyword: 'this' missing for <class 'sqlglot.expressions.Coalesce'>. Line 1, Col: 11.\n  SELECT ???\u001b[4m,\u001b[0m s.superhero_name, p.publisher_name FROM superhero s JOIN publisher p ON s.publisher_id = p.id WHERE",
+    "error_tokens": 75,
+    "issue_sql_tokens": 46
+  },
+  {
+    "query_idx": 480,
+    "db_id": "toxicology",
+    "valid": false,
+    "error_message": "Expected END after CASE. Line 4, Col: 82.\n  _id) != 'c' THEN atom_id\nWHEN element = 'cl' AND lead(element) OVER (ORDER BY atom_id) IS NULL THEN \u001b[4matom_id\u001b[0m, ROW_NUMBER()\nOVER (ORDER BY atom_id) AS row_num ) AS tmp5 WHERE atom_id IS NOT NULL;",
+    "error_tokens": 94,
+    "issue_sql_tokens": 144
+  },
+  {
+    "query_idx": 520,
+    "db_id": "debit_card_specializing",
+    "valid": false,
+    "error_message": "Expecting ). Line 8, Col: 11.\n  ) AS transactionid\n        FROM transactions_1k t\n        WHERE t.customerid = c.customerid\n        \u001b[4mFOR\u001b[0m JSON PATH\n    ) AS transactions\nFROM customers c\nINNER JOIN transactions_1k t ON c.customerid = t.c",
+    "error_tokens": 78,
+    "issue_sql_tokens": 99
+  },
+  {
+    "query_idx": 531,
+    "db_id": "european_football_2",
+    "valid": false,
+    "error_message": "Expecting ). Line 5, Col: 39.\n  WITH CTE AS\n(\n    SELECT\n       pa.id,\n       xml_val = XMLPARSE(CONTENT \u001b[4m'<t>'\u001b[0m || REPLACE(pa.player_api_id::text, ',', '</t><t>') || '</t>'),\n       p.player_name as name\n    FRO",
+    "error_tokens": 87,
+    "issue_sql_tokens": 173
+  },
+  {
+    "query_idx": 546,
+    "db_id": "financial",
+    "valid": false,
+    "error_message": "Required keyword: 'expression' missing for <class 'sqlglot.expressions.And'>. Line 1, Col: 436.\n  UNT(*) FROM loan) <= 2 THEN NULL WHEN (SELECT distinct_payment_count FROM distinctpayments) = 1 AND \u001b[4mWHERE\u001b[0m payments IS NOT NULL THEN NULL ELSE (SELECT payments FROM paymentranks WHERE row_num = 1) END AS Se",
+    "error_tokens": 96,
+    "issue_sql_tokens": 138
+  },
+  {
+    "query_idx": 548,
+    "db_id": "formula_1",
+    "valid": false,
+    "error_message": "Invalid expression / Unexpected token. Line 3, Col: 15.\n  VALUES (-1, 2009, 1, 10, 'New Test Race', '2009-07-15', '12:00:00', 'https://example.com')\nRETURNIG \u001b[4mraceid\u001b[0m, year, round, circuitid, name, date, time, url;",
+    "error_tokens": 101,
+    "issue_sql_tokens": 98
+  }
+]
