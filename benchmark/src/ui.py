@@ -110,8 +110,11 @@ def show_main_menu() -> Dict[str, Any]:
     choice = questionary.select(
         "What would you like to do?",
         choices=[
-            questionary.Choice("Start a complete run (531 queries)", value="complete"),
+            questionary.Choice("Start a complete run (530 queries)", value="complete"),
             questionary.Choice("Start a run on a subset of queries", value="subset"),
+            questionary.Choice(
+                "Single query eval (pick one query by number)", value="single"
+            ),
             questionary.Choice("View previous runs", value="previous"),
             questionary.Choice("Exit", value="exit"),
         ],
@@ -155,12 +158,34 @@ def ask_subset_size() -> Optional[int]:
         if not text.isdigit():
             return "Please enter a valid number"
         num = int(text)
-        if num < 1 or num > 531:
-            return "Please enter a number between 1 and 531"
+        if num < 1 or num > 530:
+            return "Please enter a number between 1 and 530"
         return True
 
     answer = questionary.text(
         "How many queries do you want to run?", default="20", validate=validate_number
+    ).ask()
+
+    if answer is None:
+        return None
+
+    return int(answer)
+
+
+def ask_single_query_number() -> Optional[int]:
+    """Ask the user to pick a single query number (1-530)."""
+
+    def validate_number(text):
+        if not text.isdigit():
+            return "Please enter a valid number"
+        num = int(text)
+        if num < 1 or num > 530:
+            return "Please enter a number between 1 and 530"
+        return True
+
+    answer = questionary.text(
+        "Enter query number to evaluate (1-530):",
+        validate=validate_number,
     ).ask()
 
     if answer is None:

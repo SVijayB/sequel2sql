@@ -41,6 +41,7 @@ from src.prompt_generator import generate_prompts_from_file
 from src.sequel2sql_client import Sequel2SQLClient
 from src.ui import (
     ask_provider,
+    ask_single_query_number,
     ask_subset_size,
     confirm_delete,
     confirm_start,
@@ -260,6 +261,7 @@ def main():
 
     # ========== Main Menu Loop ==========
     query_limit = args.limit  # From command line
+    query_index = None  # For single-query mode (0-based)
     output_dir = None
     checkpoint_manager = None
     resume_mode = False
@@ -405,6 +407,59 @@ def main():
                 logger.info("Starting new subset run...")
                 break
 
+            elif action == "single":
+                # Pick a specific query by 1-based number
+                selected_provider = ask_provider(PROVIDERS)
+                if selected_provider is None:
+                    continue
+                try:
+                    validate_config(selected_provider)
+                    model_config = get_model_config(selected_provider)
+                except SystemExit:
+                    continue
+
+                query_number = ask_single_query_number()
+                if query_number is None:
+                    continue
+
+                # Convert to 0-based index
+                query_index = query_number - 1
+
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                logger = setup_logger(timestamp)
+                logger.info("=" * 70)
+                logger.info(
+                    f"SEQUEL2SQL Benchmark Starting - SINGLE QUERY #{query_number}"
+                )
+                logger.info("=" * 70)
+
+                total_queries = 1
+                query_limit = 1
+                logger.info(
+                    f"Running SINGLE QUERY mode: query #{query_number} (index {query_index})"
+                )
+
+                display_config_summary(model_config, total_queries)
+
+                if not confirm_start():
+                    continue
+
+                output_dir = get_outputs_dir() / f"run_{timestamp}"
+                output_dir.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Output directory: {output_dir}")
+
+                checkpoint_manager = CheckpointManager(output_dir)
+                checkpoint_manager.set_run_config(
+                    provider=selected_provider,
+                    model_id=model_config["model_id"],
+                    model_name=model_config["display_name"],
+                    pipeline_type="single",
+                    query_limit=1,
+                )
+                resume_mode = False
+                logger.info(f"Starting single query run for query #{query_number}...")
+                break
+
             elif action == "previous":
                 # View previous runs
                 runs = get_previous_runs(get_outputs_dir())
@@ -492,6 +547,7 @@ def main():
                 prompts_file,
                 schema_field="preprocess_schema",
                 limit=query_limit,
+                query_index=query_index,
             )
             logger.info(f"✓ Generated {num_generated} prompts")
             checkpoint_manager.save_checkpoint()

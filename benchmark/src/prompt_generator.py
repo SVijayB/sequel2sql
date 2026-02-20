@@ -58,6 +58,7 @@ def generate_prompts_from_file(
     output_path: Path,
     schema_field: str = "preprocess_schema",
     limit: int = None,
+    query_index: int = None,
 ) -> int:
     """
     Generate prompts from input JSONL file and save to output file.
@@ -67,6 +68,7 @@ def generate_prompts_from_file(
         output_path: Path to output JSONL file for prompts
         schema_field: Field name containing the schema
         limit: Optional limit on number of instances to process
+        query_index: If set, extract only the single 0-based record at this index
 
     Returns:
         Number of prompts generated
@@ -78,7 +80,9 @@ def generate_prompts_from_file(
     with open(input_path, "r", encoding="utf-8") as f:
         data_list = [json.loads(line) for line in f]
 
-    if limit:
+    if query_index is not None:
+        data_list = [data_list[query_index]]
+    elif limit:
         data_list = data_list[:limit]
 
     logger.info(f"Generating prompts for {len(data_list)} instances...")

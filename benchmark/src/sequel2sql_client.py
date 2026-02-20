@@ -18,6 +18,9 @@ from pathlib import Path
 from typing import Any, Dict
 
 import logfire
+from sqlalchemy import text
+
+from .logger_config import get_logger
 
 # I have no idea what any of the below code below means, I did not create this import mess and I am not going to bother trying to fix it.
 
@@ -52,7 +55,21 @@ _sqlagent = sys.modules["_s2s_sqlagent"]
 agent = _sqlagent.agent
 get_database_deps = _sqlagent.get_database_deps
 
-from .logger_config import get_logger
+
+def _execute_raw_statements(engine, statements: list) -> None:
+    """
+    Execute a list of raw SQL statements (including DDL) directly via the
+    SQLAlchemy engine, bypassing the Database.execute_sql DDL guard.
+    Each statement is run in its own autocommit connection so DDL is
+    committed immediately.
+    """
+    for stmt in statements:
+        stmt = stmt.strip()
+        if not stmt:
+            continue
+        with engine.connect() as conn:
+            conn.execute(text(stmt))
+            conn.commit()
 
 
 class Sequel2SQLClient:
@@ -101,6 +118,9 @@ class Sequel2SQLClient:
         db_id = task_data.get("db_id", "postgres")
         query = task_data.get("query", "")
         issue_sql_raw = task_data.get("issue_sql", [])
+        schema = task_data.get("preprocess_schema", "")
+        preprocess_sql = task_data.get("preprocess_sql", [])
+        clean_up_sql = task_data.get("clean_up_sql", [])
 
         # issue_sql is stored as a list of SQL strings in the benchmark data
         if isinstance(issue_sql_raw, list):
@@ -108,9 +128,10 @@ class Sequel2SQLClient:
         else:
             issue_sql_str = str(issue_sql_raw)
 
-        # Build the user message matching the baseline prompt format.
-        # Schema is omitted here — the agent fetches it live via tools.
+        # Build the user message matching the baseline prompt format,
+        # including the pre-processed schema from the benchmark data.
         user_message = (
+            f"# Database Schema:\n{schema}\n\n"
             f"# User issue:\n{query}\n\n"
             f"# Problematic SQL:\n```sql\n{issue_sql_str}\n```"
         )
@@ -129,13 +150,38 @@ class Sequel2SQLClient:
                     # Build database deps for this specific database
                     deps = get_database_deps(db_id)
 
-                    # Run the full agent pipeline (tools: schema lookup, validation,
-                    # few-shot retrieval, SQL analysis)
-                    result = agent.run_sync(user_message, deps=deps)
+                    # Run preprocess_sql so the live DB matches preprocess_schema.
+                    # This ensures validate_query (EXPLAIN) sees the same tables
+                    # the benchmark expects. The evaluation phase will re-run them.
+                    if preprocess_sql:
+                        self.logger.debug(
+                            f"Running {len(preprocess_sql)} preprocess_sql statement(s) for {db_id}"
+                        )
+                        _execute_raw_statements(deps.database.engine, preprocess_sql)
+
+                    try:
+                        # Run the full agent pipeline (tools: schema lookup,
+                        # validation, few-shot retrieval, SQL analysis)
+                        result = agent.run_sync(user_message, deps=deps)
+                    finally:
+                        # Clean up temp objects so the DB is restored for
+                        # the evaluation phase (which re-runs preprocess_sql itself)
+                        if clean_up_sql:
+                            self.logger.debug(
+                                f"Running {len(clean_up_sql)} clean_up_sql statement(s) for {db_id}"
+                            )
+                            try:
+                                _execute_raw_statements(
+                                    deps.database.engine, clean_up_sql
+                                )
+                            except Exception as cleanup_err:
+                                self.logger.warning(
+                                    f"clean_up_sql failed (non-fatal): {cleanup_err}"
+                                )
 
                     self.successful_requests += 1
                     span.set_attribute("attempts", attempt)
-                    time.sleep(1)  # respect 1 req/sec rate limit
+                    time.sleep(2)  # respect 1 req/sec rate limit
                     return str(result.output)
 
                 except Exception as e:
@@ -150,7 +196,7 @@ class Sequel2SQLClient:
                         or "rate" in error_str
                         or "quota" in error_str
                     ):
-                        wait = 15 * attempt
+                        wait = 10 * attempt
                         self.logger.warning(
                             f"⚠️  Rate limit hit. Waiting {wait}s before retry {attempt}/{max_retries}..."
                         )
