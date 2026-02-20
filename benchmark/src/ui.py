@@ -16,7 +16,7 @@ console = Console()
 
 def display_logo() -> None:
     """Display the SEQUEL2SQL benchmark logo."""
-    f = Figlet(font="big")
+    f = Figlet(font="ansi_shadow", width=100)
     logo = f.renderText("SEQUEL2SQL")
 
     console.print()
@@ -24,7 +24,7 @@ def display_logo() -> None:
         Panel(
             f"[bold cyan]{logo}[/bold cyan]\n"
             f"[bold white]BENCHMARK EVALUATION SYSTEM[/bold white]\n"
-            f"[dim]PostgreSQL SQL Generation Benchmark using Gemma 3 27B[/dim]",
+            f"[dim]BIRD-CRITIC BENCHMARK[/dim]",
             border_style="cyan",
             padding=(1, 2),
         )
@@ -69,9 +69,13 @@ def get_previous_runs(outputs_dir: Path) -> List[Dict[str, Any]]:
             phase = checkpoint.get("phase", "unknown")
 
             # Determine status
-            if completed >= total:
+            eval_done = checkpoint.get("evaluation_completed", False)
+            if completed >= total and eval_done:
                 status = "✓ Completed"
                 is_resumable = False
+            elif completed >= total and not eval_done:
+                status = "⏸ Eval Pending"
+                is_resumable = True
             else:
                 status = "⏸ Incomplete"
                 is_resumable = True
@@ -119,13 +123,33 @@ def show_main_menu() -> Dict[str, Any]:
     return {"action": choice}
 
 
-def ask_subset_size() -> Optional[int]:
+def ask_provider(providers: Dict[str, Any]) -> Optional[str]:
     """
-    Ask for subset size.
+    Ask the user to select an LLM provider/model.
+
+    Args:
+        providers: Dict mapping provider key -> config dict with 'display_name'
 
     Returns:
-        Number of queries, or None if cancelled
+        Selected provider key (e.g. "google"), or None if cancelled
     """
+    choices = [
+        questionary.Choice(
+            f"{cfg['display_name']}",
+            value=key,
+        )
+        for key, cfg in providers.items()
+    ]
+
+    answer = questionary.select(
+        "Which model would you like to use?",
+        choices=choices,
+    ).ask()
+
+    return answer
+
+
+def ask_subset_size() -> Optional[int]:
 
     def validate_number(text):
         if not text.isdigit():
@@ -163,7 +187,7 @@ def show_previous_runs_menu(runs: List[Dict[str, Any]]) -> Optional[Dict[str, An
 
     # Create choices list
     choices = []
-    for run in runs:
+    for i, run in enumerate(runs):
         timestamp = run["timestamp"]
         completed = run["completed"]
         total = run["total"]
@@ -177,15 +201,18 @@ def show_previous_runs_menu(runs: List[Dict[str, Any]]) -> Optional[Dict[str, An
             display_time = timestamp
 
         choice_text = f"{status}  {display_time}  ({completed}/{total} queries)"
-        choices.append(questionary.Choice(choice_text, value=run))
+        choices.append(questionary.Choice(choice_text, value=i))
 
-    choices.append(questionary.Choice("⬅ Back to main menu", value=None))
+    choices.append(questionary.Choice("⬅ Back to main menu", value=-1))
 
     answer = questionary.select(
         "Select a run to view details or resume:", choices=choices
     ).ask()
 
-    return answer
+    if answer is None or answer == -1:
+        return None
+
+    return runs[answer]
 
 
 def show_run_details_and_confirm(run: Dict[str, Any]) -> str:
@@ -259,18 +286,18 @@ def confirm_delete(run: Dict[str, Any]) -> bool:
     return answer
 
 
-def display_config_summary(
-    config: Dict[str, Any], num_keys: int, total_queries: int
-) -> None:
+def display_config_summary(config: Dict[str, Any], total_queries: int) -> None:
     """Display configuration summary."""
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column("Field", style="bold cyan")
     table.add_column("Value", style="white")
 
     table.add_row("Dialect", "PostgreSQL 14.12")
-    table.add_row("Model", "Google Gemma 3 27B")
+    table.add_row(
+        "Model", config.get("display_name", config.get("model_id", "Unknown"))
+    )
+    table.add_row("Provider", config.get("provider", "Unknown").capitalize())
     table.add_row("Total Queries", str(total_queries))
-    table.add_row("API Keys", f"{num_keys} configured")
     table.add_row("Processing", "Sequential (one query at a time)")
 
     console.print(Panel(table, title="[bold]Configuration[/bold]", border_style="blue"))

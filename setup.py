@@ -71,11 +71,11 @@ POSTGRES_DB = dotenv_values(ENV_FILE).get("DATABASE", "postgres")
 
 def display_logo():
     """Display the SEQUEL2SQL logo using pyfiglet."""
-    fig = Figlet(font="big")
+    fig = Figlet(font="ansi_shadow", width=100)
     logo = fig.renderText("SEQUEL2SQL")
-    console.print(f"[bold cyan]{logo}[/bold cyan]")
     console.print(
         Panel(
+            f"[bold cyan]{logo}[/bold cyan]\n"
             "[bold]Interactive Setup Script[/bold]\n"
             "This script will guide you through setting up SEQUEL2SQL",
             border_style="cyan",

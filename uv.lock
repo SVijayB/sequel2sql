@@ -4046,7 +4046,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-ai", specifier = ">=1.51.0" },
-    { name = "pydantic-ai-slim", extras = ["google", "web", "mistral"], specifier = ">=1.51.0" },
+    { name = "pydantic-ai-slim", extras = ["google", "mistral", "web"], specifier = ">=1.51.0" },
     { name = "pyfiglet", specifier = ">=1.0.4" },
     { name = "pymysql", specifier = ">=1.1.0" },
     { name = "pyodbc", specifier = ">=5.1.0" },
