@@ -206,7 +206,7 @@ syntax_fixer_agent = Agent(
 # =============================================================================
 
 
-@agent.tool
+@agent.tool(retries=3)
 def execute_sql_query(ctx: RunContext[AgentDeps], sql: str) -> DBQueryResponse:
     """Execute the given SQL SELECT query on the connected database and return the result.
 
@@ -344,12 +344,19 @@ def analyze_and_fix_sql(
         for err in result.errors
     ]
 
-    taxonomy_skill_guidance: Optional[str] = None
+    seen_categories: set[str] = set()
+    taxonomy_skill_parts: list[str] = []
     for err in result.errors:
-        guidance = _get_taxonomy_skill(err.taxonomy_category)
+        cat = err.taxonomy_category
+        if cat in seen_categories:
+            continue
+        seen_categories.add(cat)
+        guidance = _get_taxonomy_skill(cat)
         if not guidance.startswith("No skill file"):
-            taxonomy_skill_guidance = guidance
-        break
+            taxonomy_skill_parts.append(guidance)
+    taxonomy_skill_guidance: Optional[str] = (
+        "\n\n---\n\n".join(taxonomy_skill_parts) if taxonomy_skill_parts else None
+    )
 
     return SQLAnalysisContext(
         database_id=db_id,
@@ -424,7 +431,7 @@ def record_taxonomy_fix(
                       (e.g. "join_related", "syntax", "aggregation").
             original_sql: The broken SQL query.
             fixed_sql: The corrected SQL query.
-            approach_description: One sentence describing what was fixed.
+            approach_description: One or two sentences describing the approach taken to fix the query.
 
     Returns:
             "recorded" if saved successfully, "skipped" if category
@@ -434,7 +441,7 @@ def record_taxonomy_fix(
     return "recorded" if ok else "skipped"
 
 
-webui_agent.tool(name="execute_sql_query")(execute_sql_query)
+webui_agent.tool(name="execute_sql_query", retries=3)(execute_sql_query)
 webui_agent.tool(name="validate_query")(validate_query)
 webui_agent.tool_plain(name="find_similar_examples")(similar_examples_tool)
 webui_agent.tool(name="analyze_and_fix_sql")(analyze_and_fix_sql)

@@ -298,6 +298,13 @@ def main():
         logger.info(f"Output directory: {output_dir}")
 
         checkpoint_manager = CheckpointManager(output_dir)
+        checkpoint_manager.set_run_config(
+            provider=provider if cli_provider is not None else selected_provider,
+            model_id=model_config["model_id"],
+            model_name=model_config["display_name"],
+            pipeline_type="subset",
+            query_limit=total_queries,
+        )
         logger.info("Starting new run...")
     else:
         # Interactive menu
@@ -341,6 +348,13 @@ def main():
                 logger.info(f"Output directory: {output_dir}")
 
                 checkpoint_manager = CheckpointManager(output_dir)
+                checkpoint_manager.set_run_config(
+                    provider=selected_provider,
+                    model_id=model_config["model_id"],
+                    model_name=model_config["display_name"],
+                    pipeline_type="full",
+                    query_limit=None,
+                )
                 resume_mode = False
                 logger.info("Starting new complete run...")
                 break
@@ -380,6 +394,13 @@ def main():
                 logger.info(f"Output directory: {output_dir}")
 
                 checkpoint_manager = CheckpointManager(output_dir)
+                checkpoint_manager.set_run_config(
+                    provider=selected_provider,
+                    model_id=model_config["model_id"],
+                    model_name=model_config["display_name"],
+                    pipeline_type="subset",
+                    query_limit=total_queries,
+                )
                 resume_mode = False
                 logger.info("Starting new subset run...")
                 break

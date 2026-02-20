@@ -49,6 +49,13 @@ class CheckpointManager:
             "created_at": datetime.now().isoformat(),
             "last_updated": datetime.now().isoformat(),
             "phase": "initialization",
+            "run_config": {
+                "provider": None,
+                "model_id": None,
+                "model_name": None,
+                "pipeline_type": None,
+                "query_limit": None,
+            },
             "total_queries": 0,
             "completed_queries": 0,
             "failed_queries": 0,
@@ -229,6 +236,33 @@ class CheckpointManager:
     def is_evaluation_completed(self) -> bool:
         """Check if evaluation is completed."""
         return self.checkpoint_data.get("evaluation_completed", False)
+
+    def set_run_config(
+        self,
+        provider: str,
+        model_id: str,
+        model_name: str,
+        pipeline_type: str,
+        query_limit: Optional[int] = None,
+    ) -> None:
+        """
+        Persist run configuration metadata to the checkpoint.
+
+        Args:
+            provider: LLM provider key (e.g. "google", "mistral", "sequel2sql")
+            model_id: Model identifier string (e.g. "mistral:mistral-large-latest")
+            model_name: Human-readable model display name (e.g. "Mistral Large Latest")
+            pipeline_type: "full" for the complete benchmark, "subset" for a limited run
+            query_limit: Number of queries for subset runs; None for a full run
+        """
+        self.checkpoint_data["run_config"] = {
+            "provider": provider,
+            "model_id": model_id,
+            "model_name": model_name,
+            "pipeline_type": pipeline_type,
+            "query_limit": query_limit,
+        }
+        self.save_checkpoint()
 
     def set_total_queries(self, total: int, save: bool = True) -> None:
         """Set the total number of queries.

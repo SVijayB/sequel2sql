@@ -144,7 +144,7 @@ class Database:
         return list(self.metadata.tables.keys())
 
     def execute_sql(self, sql_query: str) -> QueryResult:
-        """Execute a SQL query and return results. Only allows SELECT style queries.
+        """Execute a SQL query and return results. Blocks DDL statements.
 
         Args:
             sql_query: SQL query string to execute
@@ -153,10 +153,12 @@ class Database:
             QueryResult with execution results
 
         Raises:
-            InvalidQueryError: If query is not a SELECT statement
+            InvalidQueryError: If query is a DDL statement
         """
-        if not sql_query.strip().upper().startswith("SELECT"):
-            raise InvalidQueryError("Only SELECT style queries are allowed")
+        _DDL_KEYWORDS = {"CREATE", "DROP", "ALTER", "TRUNCATE", "RENAME", "COMMENT"}
+        first_token = sql_query.strip().split()[0].upper() if sql_query.strip() else ""
+        if first_token in _DDL_KEYWORDS:
+            raise InvalidQueryError(f"DDL statements ({first_token}) are not allowed")
 
         rows = []
         error = None
