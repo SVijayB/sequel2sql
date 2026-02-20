@@ -1,4 +1,16 @@
-"""Generic skills for SQL error taxonomy retrieval and update."""
+# -*- coding: utf-8 -*-
+"""
+Generic skills for SQL error taxonomy retrieval and feedback-loop updates.
+
+Skill files live in src/skills/error_taxonomy/{category}.md, where {category}
+is the taxonomy_category value from a ValidationError (e.g. "join_related",
+"syntax", "aggregation", "semantic").
+
+The CATEGORY_TO_FILE translation table has been removed.  Skill file names now
+match taxonomy categories 1-to-1, so adding a new category only requires:
+  1. Adding the new tags to ErrorTag in ast_parsers/tags.py
+  2. Creating src/skills/error_taxonomy/{new_category}.md
+"""
 
 from __future__ import annotations
 
@@ -10,51 +22,23 @@ SKILLS_DIR = Path(__file__).parent / "error_taxonomy"
 
 MAX_EXAMPLES_DEFAULT = 10
 
-# Maps both internal taxonomy_category values and user-facing JSON keys
-# to the markdown file stem in src/skills/error_taxonomy/
-CATEGORY_TO_FILE: dict[str, str] = {
-    # Internal category names (from ValidationErrorOut.taxonomy_category)
-    "syntax": "syntax",
-    "semantic": "schema_link",
-    "logical": "others",
-    "join_related": "join",
-    "aggregation": "aggregation",
-    "filter_conditions": "filter",
-    "value_representation": "value",
-    "subquery_formulation": "subquery",
-    "set_operations": "set_op",
-    "structural": "select",
-    # User-facing JSON keys (identity mapping)
-    "schema_link": "schema_link",
-    "join": "join",
-    "filter": "filter",
-    "value": "value",
-    "subquery": "subquery",
-    "set_op": "set_op",
-    "others": "others",
-    "select": "select",
-}
-
 
 def get_error_taxonomy_skill(error_category: str) -> str:
     """
-    Return the markdown skill file for the given error taxonomy
-    category.  Pass the taxonomy_category value from a
-    ValidationErrorOut (e.g. "join_related", "syntax").
+    Return the markdown skill file for the given taxonomy category.
 
-    Returns full markdown text, or a short fallback message when
-    no skill file exists for that category.
+    Args:
+        error_category: Taxonomy category string from ValidationError.taxonomy_category
+                        (e.g. ``"join_related"``, ``"syntax"``, ``"aggregation"``).
+
+    Returns:
+        Full markdown text of the skill file, or a short fallback message when
+        no skill file exists for that category.
     """
-    stem = CATEGORY_TO_FILE.get(error_category)
-    if stem is None:
-        return (
-            f"No skill file found for category '{error_category}'. "
-            "Use general SQL debugging approach."
-        )
-    skill_path = SKILLS_DIR / f"{stem}.md"
+    skill_path = SKILLS_DIR / f"{error_category}.md"
     if not skill_path.exists():
         return (
-            f"Skill file '{stem}.md' not found on disk. "
+            f"No skill file found for category '{error_category}'. "
             "Use general SQL debugging approach."
         )
     return skill_path.read_text(encoding="utf-8")
@@ -67,32 +51,28 @@ def update_taxonomy_skill(
     approach_description: str,
 ) -> bool:
     """
-    Append a confirmed learned example to the skill file for
-    category.  Prunes the oldest entry when MAX_EXAMPLES is
-    exceeded.  Silently skips if fixed_sql is already present.
+    Append a confirmed learned example to the skill file for *category*.
+
+    Prunes the oldest entry when MAX_EXAMPLES is exceeded.
+    Silently skips when *fixed_sql* is already present in the file.
 
     Args:
-            category: Internal or user-facing taxonomy category string.
-            original_sql: The broken SQL query.
-            fixed_sql: The corrected SQL query.
-            approach_description: One-line description of the fix.
+        category:             Taxonomy category (e.g. ``"join_related"``).
+        original_sql:         The broken SQL query.
+        fixed_sql:            The corrected SQL query.
+        approach_description: One-line description of the fix.
 
     Returns:
-            True if the file was updated (or duplicated/skipped),
-            False if category is unknown or skill file missing.
+        ``True`` if the file was updated (or the example was already present),
+        ``False`` if the skill file for this category does not exist.
     """
-    stem = CATEGORY_TO_FILE.get(category)
-    if stem is None:
-        return False
-    skill_path = SKILLS_DIR / f"{stem}.md"
+    skill_path = SKILLS_DIR / f"{category}.md"
     if not skill_path.exists():
         return False
 
     content = skill_path.read_text(encoding="utf-8")
-
-    # Skip if this exact fixed SQL was already recorded
     if fixed_sql.strip() in content:
-        return True
+        return True  # Already recorded — idempotent
 
     max_examples = _parse_max_examples(content)
     current_count = _count_learned_examples(content)
@@ -113,9 +93,11 @@ def update_taxonomy_skill(
         f"---\n"
         f"<!-- entry_end -->\n"
     )
-
     skill_path.write_text(content + new_entry, encoding="utf-8")
     return True
+
+
+# ─── Private helpers ──────────────────────────────────────────────────────────
 
 
 def _parse_max_examples(content: str) -> int:
@@ -128,7 +110,7 @@ def _count_learned_examples(content: str) -> int:
 
 
 def _prune_oldest_example(content: str) -> str:
-    """Remove the oldest (first) learned example entry."""
+    """Remove the oldest (first) learned example entry from the file content."""
     start_marker = "<!-- entry_start -->"
     end_marker = "<!-- entry_end -->"
     start_idx = content.find(start_marker)

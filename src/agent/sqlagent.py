@@ -11,12 +11,9 @@ from pathlib import Path
 from typing import List, Optional
 
 import logfire
-import sqlglot
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.mistral import MistralModel
-from sqlglot import exp
 
 # Add both project root and src/ to sys.path for imports to work
 project_root = Path(__file__).parent.parent.parent
@@ -26,8 +23,7 @@ sys.path.insert(0, str(project_root / "src"))
 # noqa: E402 - Ignore import order since we need to set up sys.path first
 from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT  # noqa: E402
 from src.agent.prompts.webui_prompt import WEBUI_PROMPT  # noqa: E402
-from src.ast_parsers.llm_tool import validate_sql  # noqa: E402
-from src.ast_parsers.models import ValidationErrorOut  # noqa: E402
+from src.ast_parsers import ValidationResult, validate_with_db  # noqa: E402
 from src.database import AgentDeps, Database, DBQueryResponse  # noqa: E402
 from src.database import execute_sql as _execute_sql  # noqa: E402
 from src.query_intent_vectordb.search_similar_query import (  # noqa: E402
@@ -95,23 +91,6 @@ def get_database_deps(
     return AgentDeps(database=database, max_return_values=max_return_values)
 
 
-def _extract_table_names(sql: str, dialect: str) -> set[str]:
-    """
-    Best-effort extraction of table names from SQL query using sqlglot.
-
-    Returns empty set if parsing fails.
-    """
-    try:
-        parsed = sqlglot.parse_one(sql, dialect=dialect)
-        tables = set()
-        for table in parsed.find_all(exp.Table):
-            if table.name:
-                tables.add(table.name)
-        return tables
-    except Exception:
-        return set()
-
-
 # =============================================================================
 # Pydantic Models
 # =============================================================================
@@ -130,7 +109,6 @@ class ValidateQueryToolInput(BaseModel):
     """Input for the SQL validation tool."""
 
     sql: str
-    db_id: Optional[str] = None
     dialect: str = "postgres"
 
 
@@ -242,21 +220,26 @@ def execute_sql_query(ctx: RunContext[AgentDeps], sql: str) -> DBQueryResponse:
     return _execute_sql(ctx, sql)
 
 
-@agent.tool_plain
-def validate_query(input: ValidateQueryToolInput) -> List[ValidationErrorOut]:
+@agent.tool
+def validate_query(
+    ctx: RunContext[AgentDeps], input: ValidateQueryToolInput
+) -> ValidationResult:
     """
-    Validate SQL query syntax and optionally check against a database schema.
+    Validate SQL query syntax and schema against the connected live database.
 
     Use this tool to:
     - Check if a SQL query has valid PostgreSQL syntax
-    - Detect schema errors like non-existent tables/columns (if schema provided)
-    - Get metadata about query structure
+    - Detect schema errors like non-existent tables/columns
+    - Get metadata about query structure (clauses, complexity, tables referenced)
 
-    Returns validation status, any errors found, and structural metadata.
+    Reports ALL errors simultaneously: syntax errors, hallucinated tables,
+    hallucinated columns — even when the SQL is too broken to fully parse.
+
+    Returns validation status, all errors found, and structural metadata.
     """
-    return validate_sql(
+    return validate_with_db(
         input.sql,
-        db_name=input.db_id,
+        ctx.deps.database.engine,
         dialect=input.dialect,
     )
 
@@ -322,26 +305,21 @@ def analyze_and_fix_sql(
     db_id = database.database_name
     dialect = "postgres"
 
+    # Step 1: Validate SQL against the live database.
+    # Collects syntax + hallucinated-table + hallucinated-column errors together.
+    result = validate_with_db(issue_sql, database.engine, dialect=dialect)
+
+    # Step 2: Use table names from the parse result (no re-parse needed)
     if include_all_tables:
         schema_description = database.describe_schema()
         available_tables = database.table_names
+    elif result.query_metadata and result.query_metadata.tables:
+        referenced = result.query_metadata.tables
+        schema_description = database.describe_schema(referenced)
+        available_tables = referenced
     else:
-        # Try to extract referenced tables from the query
-        # This is best-effort - if parsing fails, fall back to all tables
-        try:
-            referenced_tables = _extract_table_names(issue_sql, dialect)
-            if referenced_tables:
-                schema_description = database.describe_schema(list(referenced_tables))
-                available_tables = list(referenced_tables)
-            else:
-                schema_description = database.describe_schema()
-                available_tables = database.table_names
-        except Exception:
-            schema_description = database.describe_schema()
-            available_tables = database.table_names
-
-    # Step 2: Validate SQL query
-    validation_errors = validate_sql(issue_sql, db_name=db_id, dialect=dialect)
+        schema_description = database.describe_schema()
+        available_tables = database.table_names
 
     # Step 3: Get similar examples
     examples = find_similar_examples(query_intent, n_results=6)
@@ -356,32 +334,28 @@ def analyze_and_fix_sql(
         for ex in examples
     ]
 
-    # Step 4: Look up taxonomy skill guidance for the first categorised error
+    # Step 4: Format validation errors and look up taxonomy skill guidance
     validation_errors_formatted = [
         {
-            "tag": err.tag,
+            "tag": err.tag.value,
             "message": err.message,
             "taxonomy_category": err.taxonomy_category,
         }
-        for err in validation_errors
+        for err in result.errors
     ]
 
     taxonomy_skill_guidance: Optional[str] = None
-    for err in validation_errors:
-        if err.taxonomy_category:
-            guidance = _get_taxonomy_skill(err.taxonomy_category)
-            # Only use it if a real skill file was found
-            if not guidance.startswith("No skill file") and not guidance.startswith(
-                "Skill file"
-            ):
-                taxonomy_skill_guidance = guidance
-            break
+    for err in result.errors:
+        guidance = _get_taxonomy_skill(err.taxonomy_category)
+        if not guidance.startswith("No skill file"):
+            taxonomy_skill_guidance = guidance
+        break
 
     return SQLAnalysisContext(
         database_id=db_id,
         available_tables=available_tables,
         schema_description=schema_description,
-        has_errors=(len(validation_errors) > 0),
+        has_errors=not result.valid,
         validation_errors=validation_errors_formatted,
         similar_examples=similar_examples_formatted,
         taxonomy_skill_guidance=taxonomy_skill_guidance,
@@ -461,7 +435,7 @@ def record_taxonomy_fix(
 
 
 webui_agent.tool(name="execute_sql_query")(execute_sql_query)
-webui_agent.tool_plain(name="validate_query")(validate_query)
+webui_agent.tool(name="validate_query")(validate_query)
 webui_agent.tool_plain(name="find_similar_examples")(similar_examples_tool)
 webui_agent.tool(name="analyze_and_fix_sql")(analyze_and_fix_sql)
 webui_agent.tool(name="describe_database_schema")(describe_database_schema)
