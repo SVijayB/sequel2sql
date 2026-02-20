@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Dict, Optional
 
-from ast_parsers.validator import validate_syntax, validate_schema
+from ast_parsers.validator import validate_query
 from ast_parsers.models import ValidationResultOut
 
 # Path to schema JSON files - supports SEQUEL2SQL_SCHEMA_DIR env var override
@@ -27,7 +27,7 @@ def validate_sql(
     db_name: Optional[str] = None,
     dialect: str = "postgres",
 ) -> ValidationResultOut:
-    """Validate SQL syntax and optionally schema, returning validation result with valid flag.
+    """Validate SQL syntax and optionally schema, returning a stable ValidationResultOut.
 
     Args:
         sql: SQL query string to validate.
@@ -36,15 +36,9 @@ def validate_sql(
         dialect: SQL dialect (default: "postgres").
 
     Returns:
-        ValidationResultOut with valid flag and errors list.
-        - valid=True means no errors detected
-        - valid=False means errors were found (check errors list)
+        ValidationResultOut:
+        - valid=True, errors=None, tags=None  → no errors detected
+        - valid=False, errors=[...], tags=[...] → errors found (check errors list)
     """
     schema = _load_schema(db_name) if db_name else None
-    
-    if schema is not None:
-        result = validate_schema(sql, schema, dialect=dialect)
-    else:
-        result = validate_syntax(sql, dialect=dialect)
-
-    return ValidationResultOut.from_validation_result(result)
+    return validate_query(sql, schema=schema, dialect=dialect)

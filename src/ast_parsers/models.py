@@ -131,9 +131,9 @@ class ValidationResultOut(BaseModel):
     """Result of SQL validation: valid flag, errors (with tags from the canonical set), sql, optional metadata."""
 
     valid: bool = Field(..., description="True if the query passed validation")
-    errors: List[ValidationErrorOut] = Field(default_factory=list, description="Validation errors if invalid")
+    errors: Optional[List[ValidationErrorOut]] = Field(default=None, description="Validation errors if invalid; None when valid")
     sql: str = Field(default="", description="Original SQL that was validated")
-    tags: List[TagName] = Field(default_factory=list, description="Error tags (same order as errors)")
+    tags: Optional[List[TagName]] = Field(default=None, description="Error tags (same order as errors); None when valid")
     query_metadata: Optional[QueryMetadataOut] = Field(default=None, description="Structure metadata if analyzed")
 
     model_config = {"extra": "forbid"}
@@ -171,8 +171,8 @@ class ValidationResultOut(BaseModel):
             )
         return cls(
             valid=result.valid,
-            errors=errors_out,
+            errors=errors_out if errors_out else None,
             sql=result.sql or "",
-            tags=result.tags or [],
+            tags=result.tags if result.tags else None,
             query_metadata=metadata_out,
         )
