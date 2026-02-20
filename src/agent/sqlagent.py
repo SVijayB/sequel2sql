@@ -21,6 +21,8 @@ sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
 # noqa: E402 - Ignore import order since we need to set up sys.path first
+import time
+
 from src.agent.prompts.benchmark_prompt import BENCHMARK_PROMPT  # noqa: E402
 from src.agent.prompts.webui_prompt import WEBUI_PROMPT  # noqa: E402
 from src.ast_parsers import ValidationResult, validate_with_db  # noqa: E402
@@ -315,8 +317,18 @@ def analyze_and_fix_sql(
         available_tables = database.table_names
     elif result.query_metadata and result.query_metadata.tables:
         referenced = result.query_metadata.tables
-        schema_description = database.describe_schema(referenced)
-        available_tables = referenced
+        # The issue_sql may reference wrong/typo table names (that's the bug
+        # we're fixing). Only describe tables that actually exist in the DB;
+        # fall back to the full schema when none of the referenced tables are
+        # real so the agent can see what IS available.
+        real_tables = database.table_names
+        existing_referenced = [t for t in referenced if t in real_tables]
+        if existing_referenced:
+            schema_description = database.describe_schema(existing_referenced)
+            available_tables = real_tables  # always show all real tables
+        else:
+            schema_description = database.describe_schema()
+            available_tables = real_tables
     else:
         schema_description = database.describe_schema()
         available_tables = database.table_names

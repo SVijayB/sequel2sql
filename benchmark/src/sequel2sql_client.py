@@ -81,7 +81,7 @@ class Sequel2SQLClient:
         )
 
     def call_api_with_data(
-        self, task_data: Dict[str, Any], max_retries: int = 3
+        self, task_data: Dict[str, Any], max_retries: int = 2
     ) -> str:
         """
         Run the Sequel2SQL agent pipeline on a single benchmark task.
@@ -100,6 +100,20 @@ class Sequel2SQLClient:
         """
         db_id = task_data.get("db_id", "postgres")
         query = task_data.get("query", "")
+        issue_sql_raw = task_data.get("issue_sql", [])
+
+        # issue_sql is stored as a list of SQL strings in the benchmark data
+        if isinstance(issue_sql_raw, list):
+            issue_sql_str = "\n".join(issue_sql_raw)
+        else:
+            issue_sql_str = str(issue_sql_raw)
+
+        # Build the user message matching the baseline prompt format.
+        # Schema is omitted here — the agent fetches it live via tools.
+        user_message = (
+            f"# User issue:\n{query}\n\n"
+            f"# Problematic SQL:\n```sql\n{issue_sql_str}\n```"
+        )
 
         last_error = None
 
@@ -117,7 +131,7 @@ class Sequel2SQLClient:
 
                     # Run the full agent pipeline (tools: schema lookup, validation,
                     # few-shot retrieval, SQL analysis)
-                    result = agent.run_sync(query, deps=deps)
+                    result = agent.run_sync(user_message, deps=deps)
 
                     self.successful_requests += 1
                     span.set_attribute("attempts", attempt)
