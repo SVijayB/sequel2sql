@@ -45,11 +45,6 @@ def extract_skeleton(sql: str) -> str:
 
     if not ast:
         return ""
-        
-    # We only care about actual SQL queries, not random expressions
-    # A complete query should typically be a Select, Subquery, Union, etc.
-    if not isinstance(ast, (exp.Select, exp.Subquery, exp.Union, exp.Intersect, exp.Except, exp.Insert, exp.Update, exp.Delete, exp.Merge)):
-        return ""
 
     def transform_node(node: exp.Expression) -> exp.Expression:
         # Replace Literals (strings, numbers, booleans, nulls)
@@ -124,7 +119,9 @@ def _get_collection(database_name: str) -> chromadb.Collection:
     )
 
     collection = client.get_or_create_collection(
-        name=COLLECTION_NAME, embedding_function=emb_fn
+        name=COLLECTION_NAME, 
+        embedding_function=emb_fn,
+        metadata={"hnsw:space": "cosine"}
     )
 
     _COLLECTION_CACHE[database_name] = collection
@@ -152,11 +149,13 @@ def save_confirmed_fix(
     # 1. Deduplication Gate
     # Ask for top 5 most similar items by intent embedding
     try:
-        results = collection.query(
-            query_texts=[intent],
-            n_results=5,
-            include=["documents", "metadatas", "distances"],
-        )
+        fetch_count = min(5, collection.count())
+        if fetch_count > 0:
+            results = collection.query(
+                query_texts=[intent],
+                n_results=fetch_count,
+                include=["documents", "metadatas", "distances"],
+            )
 
         if results and results["documents"] and results["documents"][0]:
             docs = results["documents"][0]
@@ -233,7 +232,7 @@ def find_similar_confirmed_fixes(
 
         results = collection.query(
             query_texts=[intent],
-            n_results=n_results * 2,
+            n_results=min(n_results * 2, collection.count()),
             include=["documents", "metadatas", "distances"],
         )
 
@@ -295,7 +294,6 @@ def find_similar_confirmed_fixes(
         final_results = []
         ids_to_increment = []
         metadatas_to_update = []
-        documents_to_update = []
 
         for sc in top_candidates:
             c = sc["candidate"]
@@ -324,7 +322,6 @@ def find_similar_confirmed_fixes(
             updated_meta = dict(meta)
             updated_meta["usage_count"] = int(updated_meta.get("usage_count", 0)) + 1
             metadatas_to_update.append(updated_meta)
-            documents_to_update.append(c["doc"])
 
         # Best-effort increment usage_count
         try:
@@ -332,7 +329,6 @@ def find_similar_confirmed_fixes(
                 collection.update(
                     ids=ids_to_increment,
                     metadatas=metadatas_to_update,
-                    documents=documents_to_update,
                 )
         except Exception:
             pass
@@ -406,19 +402,29 @@ def prune_confirmed_fixes(database: str, max_items: int = 500) -> int:
         tier_3 = [item for item in items if item["usage_count"] == 1 and item["age_days"] >= 90]
 
         # Order of deletion
+        seen_ids = set()
         candidates = []
         
         # Add tier 1 (sort older first)
         tier_1.sort(key=lambda x: x["age_days"], reverse=True)
-        candidates.extend(tier_1)
+        for item in tier_1:
+            if item["id"] not in seen_ids:
+                candidates.append(item)
+                seen_ids.add(item["id"])
         
         # Add tier 2 (sort older first, exclude already in list)
         tier_2.sort(key=lambda x: x["age_days"], reverse=True)
-        candidates.extend([x for x in tier_2 if x not in candidates])
+        for item in tier_2:
+            if item["id"] not in seen_ids:
+                candidates.append(item)
+                seen_ids.add(item["id"])
         
         # Add tier 3 (sort older first, exclude already in list)
         tier_3.sort(key=lambda x: x["age_days"], reverse=True)
-        candidates.extend([x for x in tier_3 if x not in candidates])
+        for item in tier_3:
+            if item["id"] not in seen_ids:
+                candidates.append(item)
+                seen_ids.add(item["id"])
 
         to_delete_count = count - max_items
         actual_delete_count = min(to_delete_count, len(candidates))

@@ -33,7 +33,10 @@ def embed_and_store() -> None:
         path=str(CHROMA_PATH)
     )
 
-    collection = client.get_or_create_collection(COLLECTION_NAME)
+    collection = client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        metadata={"hnsw:space": "cosine"}
+    )
 
     documents: list[str] = []
     metadatas: list[dict] = []

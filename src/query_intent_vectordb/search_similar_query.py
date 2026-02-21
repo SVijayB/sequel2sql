@@ -107,9 +107,9 @@ def mmr_select(
     if not candidates:
         return []
 
-    # Convert distance → similarity
+    # Convert distance → similarity (assuming cosine hnsw space)
     for c in candidates:
-        c["_sim"] = 1.0 / (1.0 + float(c["dist"]))
+        c["_sim"] = 1.0 - float(c["dist"])
 
     remaining = sorted(candidates, key=lambda x: -x["_sim"])
     selected = [remaining.pop(0)]
