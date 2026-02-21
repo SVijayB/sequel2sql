@@ -14,4 +14,4 @@ benchmark/logs/
 benchmark/data/
 requirements.txt
 environment.yml
-CLAUDE.md
+src/db_skills/chroma/

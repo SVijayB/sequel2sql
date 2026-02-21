@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
+from src.db_skills.store import find_similar_confirmed_fixes, save_confirmed_fix
+
 # Add both project root and src/ to sys.path for imports to work
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -145,6 +147,14 @@ class SchemaDescription(BaseModel):
     available_tables: list[str]
     schema_description: str
 
+class SaveConfirmedFixInput(BaseModel):
+    database: str
+    intent: str        # the user's original natural language request
+    corrected_sql: str
+    error_sql: str
+    explanation: str   # what was wrong and what specifically was changed to fix it
+    tables: list[str] = []
+
 
 class SQLAnalysisContext(BaseModel):
     """Comprehensive context for SQL query fixing (webui_agent tool)."""
@@ -164,6 +174,12 @@ class SQLAnalysisContext(BaseModel):
 
     # Taxonomy skill guidance (populated when errors have a known category)
     taxonomy_skill_guidance: Optional[str] = None
+
+    db_confirmed_fixes: List[dict] = []
+    # Past fixes confirmed correct by real users on this specific database.
+    # Retrieved from the per-database store in src/db_skills/.
+    # Weight these more heavily than general examples — they reflect real
+    # confirmed corrections on this exact schema.
 
     # Metadata
     query_intent: str
@@ -316,13 +332,13 @@ def analyze_and_fix_sql(
         schema_description = database.describe_schema()
         available_tables = database.table_names
     elif result.query_metadata and result.query_metadata.tables:
-        referenced = result.query_metadata.tables
+        referenced_tables = result.query_metadata.tables
         # The issue_sql may reference wrong/typo table names (that's the bug
         # we're fixing). Only describe tables that actually exist in the DB;
         # fall back to the full schema when none of the referenced tables are
         # real so the agent can see what IS available.
         real_tables = database.table_names
-        existing_referenced = [t for t in referenced if t in real_tables]
+        existing_referenced = [t for t in referenced_tables if t in real_tables]
         if existing_referenced:
             schema_description = database.describe_schema(existing_referenced)
             available_tables = real_tables  # always show all real tables
@@ -370,6 +386,13 @@ def analyze_and_fix_sql(
         "\n\n---\n\n".join(taxonomy_skill_parts) if taxonomy_skill_parts else None
     )
 
+    db_fixes = find_similar_confirmed_fixes(
+        intent=query_intent,
+        database=db_id,
+        tables=list(referenced_tables) if referenced_tables else None,
+        n_results=4,
+    )
+
     return SQLAnalysisContext(
         database_id=db_id,
         available_tables=available_tables,
@@ -378,6 +401,7 @@ def analyze_and_fix_sql(
         validation_errors=validation_errors_formatted,
         similar_examples=similar_examples_formatted,
         taxonomy_skill_guidance=taxonomy_skill_guidance,
+        db_confirmed_fixes=db_fixes,
         query_intent=query_intent,
         dialect=dialect,
     )
@@ -453,6 +477,66 @@ def record_taxonomy_fix(
     return "recorded" if ok else "skipped"
 
 
+@agent.tool_plain
+def save_confirmed_fix_tool(input: SaveConfirmedFixInput) -> str:
+    """
+    Persist a user-confirmed SQL fix to the database-specific knowledge store.
+
+    Call this ONLY after the user explicitly confirms the fix is correct.
+    Confirmation phrases to watch for: "yes that's right", "perfect", "exactly",
+    "that works", "correct", "looks good", "that's correct", "great", "yeah".
+
+    `intent` should be the user's original natural language request from the
+    start of this fix session — not a summary, not a paraphrase. Take it
+    directly from the first substantive user message describing what they wanted
+    the query to do.
+
+    `explanation` should be 2–4 sentences: what was wrong in the original SQL
+    and what specific change fixed it. This gets retrieved later as context so
+    make it precise and useful, not generic.
+
+    `database` comes from ctx.deps.database.database_name.
+
+    Also call `record_taxonomy_fix` on confirmation — both tools serve different
+    purposes and both should fire on every confirmed fix.
+    """
+    import json
+    
+    result = save_confirmed_fix(
+        database=input.database,
+        intent=input.intent,
+        corrected_sql=input.corrected_sql,
+        error_sql=input.error_sql,
+        explanation=input.explanation,
+        tables=input.tables,
+    )
+    return json.dumps(result)
+
+
+class FindSimilarConfirmedFixesInput(BaseModel):
+    intent: str
+    database: str
+    tables: list[str] = []
+
+@agent.tool_plain
+def find_similar_confirmed_fixes_tool(input: FindSimilarConfirmedFixesInput) -> str:
+    """
+    Search for user-confirmed SQL fixes for this specific database based on the query intent.
+    Call this tool to find previously validated solutions that might apply to the current query.
+    It returns empty if the database knowledge store is empty or does not exist yet.
+    """
+    import json
+    from src.db_skills.store import find_similar_confirmed_fixes
+    fixes = find_similar_confirmed_fixes(
+        intent=input.intent,
+        database=input.database,
+        tables=input.tables,
+        n_results=4
+    )
+    if not fixes:
+        return "No confirmed fixes found in the knowledge base."
+    return json.dumps(fixes)
+
 webui_agent.tool(name="execute_sql_query", retries=3)(execute_sql_query)
 webui_agent.tool(name="validate_query")(validate_query)
 webui_agent.tool_plain(name="find_similar_examples")(similar_examples_tool)
@@ -460,6 +544,8 @@ webui_agent.tool(name="analyze_and_fix_sql")(analyze_and_fix_sql)
 webui_agent.tool(name="describe_database_schema")(describe_database_schema)
 webui_agent.tool_plain(name="get_error_taxonomy_skill")(get_error_taxonomy_skill)
 webui_agent.tool_plain(name="record_taxonomy_fix")(record_taxonomy_fix)
+webui_agent.tool_plain(name="save_confirmed_fix_tool")(save_confirmed_fix_tool)
+webui_agent.tool_plain(name="find_similar_confirmed_fixes_tool")(find_similar_confirmed_fixes_tool)
 
 
 # =============================================================================
