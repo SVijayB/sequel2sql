@@ -15,8 +15,8 @@ load_dotenv(ENV_PATH)
 # Supported providers and their model configs
 PROVIDERS = {
     "google": {
-        "model_id": "google-gla:models/gemma-3-27b-it",
-        "display_name": "Google Gemma 3 27B",
+        "model_id": "google-gla:gemini-3-flash-preview",
+        "display_name": "Google Gemini 3 Flash Preview",
     },
     "mistral": {
         "model_id": "mistral:mistral-large-latest",

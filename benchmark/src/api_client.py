@@ -1,4 +1,4 @@
-"""LLM API client backed by pydantic-ai (Google Gemma 3 27B / Mistral Large)"""
+"""LLM API client backed by pydantic-ai (Google Gemini 3 Preview / Mistral Large)"""
 
 import os
 import time
@@ -15,7 +15,7 @@ class LLMClient:
     LLM client backed by pydantic-ai.
 
     Supports:
-    - Google Gemma 3 27B  (provider="google")
+    - Google Gemini 3 Preview  (provider="google")
     - Mistral Large Latest (provider="mistral")
 
     No key rotation — one API key per provider, retries handled by pydantic-ai.

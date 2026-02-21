@@ -1,6 +1,6 @@
 # SEQUEL2SQL Benchmark
 
-A clean, user-friendly console application for running the BIRD-CRITIC PostgreSQL benchmark (530 queries) using Google Gemma 3 27B with intelligent API key rotation and full Docker-based evaluation.
+A clean, user-friendly console application for running the BIRD-CRITIC PostgreSQL benchmark (530 queries) using various models and full Docker-based evaluation.
 
 This benchmark tool was built with a lot of code being reused from the [BIRD-CRITIC-1](https://github.com/bird-bench/BIRD-CRITIC-1) repository. 
 You can refer to it for more details on the benchmark dataset and evaluation methodology along with data sources.
@@ -126,7 +126,7 @@ All configuration is in [src/config.py](src/config.py):
 
 ```python
 MODEL_CONFIG = {
-    "model_name": "models/gemma-3-27b-it",
+    "model_name": "models/google-gla:gemini-3-flash-preview",
     "timeout": 10,
     "max_threads": 8,
     "checkpoint_frequency": 10

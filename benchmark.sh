@@ -108,7 +108,7 @@ echo -e "${GREEN}✓${NC} Database dumps found"
 # Show available models
 echo ""
 echo -e "${CYAN}Available models:${NC}"
-echo -e "  -- Google Gemma 3 27B   (requires GOOGLE_API_KEY in .env)"
+echo -e "  -- Gemini 3 Flash Preview   (requires GOOGLE_API_KEY in .env)"
 echo -e "  -- Mistral Large Latest (requires MISTRAL_API_KEY in .env)"
 echo -e "  -- Sequel2SQL Pipeline  (requires MISTRAL_API_KEY in .env)"
 echo ""
