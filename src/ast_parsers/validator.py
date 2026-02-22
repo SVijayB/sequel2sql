@@ -249,6 +249,17 @@ def _check_schema(
         t.lower(): {c.lower(): c for c in cols} for t, cols in schema.items()
     }
 
+    # ── Collect CTE aliases so they are never flagged as missing tables ────────
+    cte_aliases: Set[str] = set()
+    for cte_node in ast.find_all(exp.CTE):
+        if cte_node.alias:
+            cte_aliases.add(cte_node.alias.lower())
+
+    # ── Collect subquery aliases (these are also virtual tables) ──────────────
+    for sq_node in ast.find_all(exp.Subquery):
+        if sq_node.alias:
+            cte_aliases.add(sq_node.alias.lower())
+
     # ── Alias map: {alias_or_table_lower -> real_table_lower} ─────────────────
     alias_map: Dict[str, str] = {}
     for table_node in ast.find_all(exp.Table):
@@ -262,7 +273,7 @@ def _check_schema(
     missing_tables: List[str] = []
     for table_node in ast.find_all(exp.Table):
         t = table_node.name.lower()
-        if t and t not in schema_lower:
+        if t and t not in schema_lower and t not in cte_aliases:
             missing_tables.append(table_node.name)
             errors.append(
                 ValidationError(
@@ -290,8 +301,8 @@ def _check_schema(
         if qualifier:
             # Qualified reference: resolve alias → real table
             resolved = alias_map.get(qualifier.lower())
-            if resolved is None:
-                # Unknown qualifier — could be a CTE or subquery alias; skip
+            if resolved is None or qualifier.lower() in cte_aliases:
+                # Unknown qualifier or CTE/subquery alias — skip
                 continue
             table_cols = schema_lower.get(resolved, {})
             if col_lower not in table_cols:

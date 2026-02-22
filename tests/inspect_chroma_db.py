@@ -10,8 +10,8 @@ sys.path.append(
 
 # Path to ChromaDB (persistent)
 PRJ_ROOT = Path(__file__).resolve().parents[1]
-CHROMA_PATH = PRJ_ROOT / "src" / "chroma_db"
-COLLECTION_NAME = "query_intents"
+CHROMA_PATH = PRJ_ROOT / "src" / "db_skills" / "chroma"/"european_football_2"
+COLLECTION_NAME = "db_confirmed_fixes"
 
 
 def inspect_chroma():

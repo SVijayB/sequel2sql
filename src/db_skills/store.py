@@ -1,4 +1,3 @@
-import difflib
 import hashlib
 import re
 from datetime import datetime, timezone
@@ -6,8 +5,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import chromadb
-import sqlglot
-from sqlglot import exp
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -27,69 +24,6 @@ _COLLECTION_CACHE: Dict[str, chromadb.Collection] = {}
 # ---------------------------------------------------------------------------
 # Functions
 # ---------------------------------------------------------------------------
-
-
-def extract_skeleton(sql: str) -> str:
-    """
-    Parse SQL into an AST, walk the tree, and replace:
-    - All string and numeric literals with `?`
-    - All table and column identifiers with `?`
-    - Keep all SQL keywords, functions, operators, and structural elements.
-    Returns a compact structural fingerprint string.
-    Returns empty string if sqlglot parsing fails.
-    """
-    try:
-        ast = sqlglot.parse_one(sql, read="postgres", error_level=sqlglot.ErrorLevel.RAISE)
-    except Exception:
-        return ""
-
-    if not ast:
-        return ""
-
-    def transform_node(node: exp.Expression) -> exp.Expression:
-        # Replace Literals (strings, numbers, booleans, nulls)
-        if isinstance(node, exp.Literal):
-            return exp.Literal.string("?")
-
-        if isinstance(node, exp.Boolean):
-            return exp.Literal.string("?")
-
-        if isinstance(node, exp.Null):
-            return exp.Literal.string("?")
-
-        # Replace Identifiers (table names, column names)
-        # Note: We don't want to replace function names, but sqlglot separates Function
-        # from the identifiers used inside it.
-        if isinstance(node, exp.Identifier):
-            # If this identifier is the name of a function, keep it.
-            # Usually exp.Func has a name attribute which is a string, but if an
-            # Identifier is a direct child of an anonymous function it might be tricky.
-            # In sqlglot, most function calls will have string names, and arguments as children.
-            return exp.Identifier(this="?", quoted=False)
-
-        # Do not transform the node itself if it's not a literal or identifier,
-        # but let sqlglot traverse its children.
-        return node
-
-    # Transform the AST inplace using sqlglot's transform
-    # The transform function recursively applies the mapping to all nodes.
-    try:
-        # We need to make a copy to avoid mutating any cached trees if applicable
-        transformed_ast = ast.copy().transform(transform_node)
-        return transformed_ast.sql(dialect="postgres")
-    except Exception:
-        return ""
-
-
-def _skeleton_similarity(s1: str, s2: str) -> float:
-    """
-    Normalized edit distance between two skeleton strings.
-    Returns float 0.0-1.0, where 1.0 is identical.
-    Returns 0.0 if either string is empty.
-    """
-    if not s1 or not s2:
-        return 0.0
-    return difflib.SequenceMatcher(None, s1, s2).ratio()
 
 
 def _get_collection(database_name: str) -> chromadb.Collection:
@@ -135,16 +69,14 @@ def save_confirmed_fix(
     corrected_sql: str,
     error_sql: str,
     explanation: str,
-    tables: List[str],
     confirmed_at: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Saves a confirmed SQL fix to the database-specific ChromaDB store.
-    Deduplicates using intent similarity and skeleton similarity thresholds (0.8).
+    Deduplicates using intent similarity threshold of 0.8.
     Returns {"status": "saved", "id": doc_id} or {"status": "duplicate", "matched_id": id}.
     """
     collection = _get_collection(database)
-    new_skeleton = extract_skeleton(corrected_sql)
 
     # 1. Deduplication Gate
     # Ask for top 5 most similar items by intent embedding
@@ -169,13 +101,9 @@ def save_confirmed_fix(
                 # Assuming cosine distance where similarity = 1 - distance
                 similarity = 1.0 - dist
                 
-                # Check thresholds
+                # Deduplicate directly on intent semantic distance >= 0.8
                 if similarity >= 0.8:
-                    candidate_skeleton = meta.get("skeleton", "") if meta else ""
-                    skel_sim = _skeleton_similarity(new_skeleton, candidate_skeleton)
-
-                    if skel_sim >= 0.8:
-                        return {"status": "duplicate", "matched_id": doc_id}
+                    return {"status": "duplicate", "matched_id": doc_id}
     except Exception:
         # Ignore query errors on an empty collection or during deduplication
         pass
@@ -193,11 +121,13 @@ def save_confirmed_fix(
         "corrected_sql": corrected_sql,
         "error_sql": error_sql,
         "explanation": explanation,
-        "skeleton": new_skeleton,
-        "tables": ",".join(tables),
         "confirmed_at": confirmed_at,
         "usage_count": 0,
     }
+
+    import logging
+    logger = logging.getLogger("db_skills_benchmark")
+    logger.debug(f"ChromaDB Upsert -> Intent: {intent[:50]}... | Explanation: {explanation[:50]}...")
 
     collection.upsert(
         documents=[intent],
@@ -217,11 +147,10 @@ def save_confirmed_fix(
 
 
 def find_similar_confirmed_fixes(
-    intent: str, database: str, tables: Optional[List[str]] = None, n_results: int = 4
+    intent: str, database: str, n_results: int = 4
 ) -> List[Dict[str, Any]]:
     """
     Query the collection for the top candidates by intent similarity.
-    Returns reranked results based on intent similarity and table overlap.
     """
     try:
         collection = _get_collection(database)
@@ -232,7 +161,7 @@ def find_similar_confirmed_fixes(
 
         results = collection.query(
             query_texts=[intent],
-            n_results=min(n_results * 2, collection.count()),
+            n_results=min(n_results, collection.count()),
             include=["documents", "metadatas", "distances"],
         )
 
@@ -245,95 +174,33 @@ def find_similar_confirmed_fixes(
         ids = results["ids"][0]
 
         candidates = []
+        ids_to_increment = []
+        metadatas_to_update = []
+        
         for doc, meta, dist, doc_id in zip(docs, metas, dists, ids):
             similarity = 1.0 - dist
+            # Only return candidates with similarity >= 0.75
             if similarity >= 0.75:
                 candidates.append(
                     {
-                        "id": doc_id,
-                        "doc": doc,
-                        "meta": meta,
-                        "similarity": similarity,
+                        "intent": doc,
+                        "error_sql": meta.get("error_sql", ""),
+                        "corrected_sql": meta.get("corrected_sql", ""),
+                        "explanation": meta.get("explanation", ""),
+                        "similarity": round(similarity, 4),
                     }
                 )
-
-        if not candidates:
-            return []
-
-        # Reranking
-        current_tables = set(tables or [])
-        scored_candidates = []
-
-        for c in candidates:
-            meta = c["meta"]
-            similarity = c["similarity"]
-            
-            stored_tables_str = meta.get("tables", "")
-            stored_tables = set(stored_tables_str.split(",")) if stored_tables_str else set()
-
-            if current_tables or stored_tables:
-                table_overlap = len(stored_tables & current_tables) / max(
-                    len(stored_tables | current_tables), 1
-                )
-                combined_score = similarity * 0.70 + table_overlap * 0.30
-            else:
-                combined_score = similarity
-
-            scored_candidates.append(
-                {
-                    "candidate": c,
-                    "combined_score": combined_score,
-                }
-            )
-
-        # Sort descending by combined_score
-        scored_candidates.sort(key=lambda x: x["combined_score"], reverse=True)
-        top_candidates = scored_candidates[:n_results]
-
-        # Prepare return format
-        final_results = []
-        ids_to_increment = []
-        metadatas_to_update = []
-
-        for sc in top_candidates:
-            c = sc["candidate"]
-            meta = c["meta"]
-            
-            stored_tables_str = meta.get("tables", "")
-            tables_list = stored_tables_str.split(",") if stored_tables_str else []
-
-            final_results.append(
-                {
-                    "intent": meta.get("intent", ""),
-                    "corrected_sql": meta.get("corrected_sql", ""),
-                    "explanation": meta.get("explanation", ""),
-                    "tables": tables_list,
-                    "similarity": round(c["similarity"], 3),
-                    "combined_score": round(sc["combined_score"], 3),
-                    "confirmed_at": meta.get("confirmed_at", ""),
-                }
-            )
-
-            # Prepare for batch increment
-            ids_to_increment.append(c["id"])
-            
-            # Create a new metadata dict to avoid modifying the one from Chroma directly
-            # which could cause issues if it's cached or frozen in some versions
-            updated_meta = dict(meta)
-            updated_meta["usage_count"] = int(updated_meta.get("usage_count", 0)) + 1
-            metadatas_to_update.append(updated_meta)
-
         # Best-effort increment usage_count
-        try:
-            if ids_to_increment:
+        if ids_to_increment:
+            try:
                 collection.update(
                     ids=ids_to_increment,
-                    metadatas=metadatas_to_update,
+                    metadatas=metadatas_to_update
                 )
-        except Exception:
-            pass
+            except Exception:
+                pass
 
-        return final_results
+        return candidates
 
     except Exception:
         # Wrap all in try/except and return safe defaults (empty list)

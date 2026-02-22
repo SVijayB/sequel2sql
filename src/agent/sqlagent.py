@@ -150,7 +150,6 @@ class SaveConfirmedFixInput(BaseModel):
     corrected_sql: str
     error_sql: str
     explanation: str   # what was wrong and what specifically was changed to fix it
-    tables: list[str] = []
 
 
 class SQLAnalysisContext(BaseModel):
@@ -386,7 +385,6 @@ def analyze_and_fix_sql(
     db_fixes = find_similar_confirmed_fixes(
         intent=query_intent,
         database=db_id,
-        tables=list(referenced_tables) if referenced_tables else None,
         n_results=4,
     )
 
@@ -477,7 +475,6 @@ def save_confirmed_fix_tool(input: SaveConfirmedFixInput) -> str:
         corrected_sql=input.corrected_sql,
         error_sql=input.error_sql,
         explanation=input.explanation,
-        tables=input.tables,
     )
     return json.dumps(result)
 
@@ -485,7 +482,6 @@ def save_confirmed_fix_tool(input: SaveConfirmedFixInput) -> str:
 class FindSimilarConfirmedFixesInput(BaseModel):
     intent: str
     database: str
-    tables: list[str] = []
 
 @agent.tool_plain
 def find_similar_confirmed_fixes_tool(input: FindSimilarConfirmedFixesInput) -> str:
@@ -495,11 +491,9 @@ def find_similar_confirmed_fixes_tool(input: FindSimilarConfirmedFixesInput) -> 
     It returns empty if the database knowledge store is empty or does not exist yet.
     """
     import json
-    from src.db_skills.store import find_similar_confirmed_fixes
     fixes = find_similar_confirmed_fixes(
         intent=input.intent,
         database=input.database,
-        tables=input.tables,
         n_results=4
     )
     if not fixes:
