@@ -28,37 +28,54 @@ def validate_syntax(
     sql: str,
     dialect: str = "postgres",
 ) -> ValidationResult:
-    """Validate SQL syntax with sqlglot. Invalid syntax => ast/query_metadata usually None."""
+    """Validate SQL syntax with sqlglot, returning all parsing and silent errors."""
+    if isinstance(sql, list):
+        sql = sql[0]
+    elif not isinstance(sql, str):
+        sql = str(sql)
+        
+    errors = []
+    
+    if not sql.strip():
+        errors.append(ValidationError(
+            tag=SyntaxErrorTags.SYNTAX_ERROR,
+            message="Cannot parse empty SQL query",
+            taxonomy_category="syntax",
+        ))
+        return ValidationResult(valid=False, errors=errors, sql=sql)
+        
+    # Check for silent fixes first
+    silent_errors = _detect_silent_fixes(sql)
+    if silent_errors:
+        errors.extend(silent_errors)
+        
+    dialect_obj = sqlglot.Dialect.get_or_raise(dialect)
+    
     try:
-        ast = sqlglot.parse_one(sql, read=dialect)
-        silent_errors = _detect_silent_fixes(sql)
-        if silent_errors:
-            result = ValidationResult(valid=False, errors=silent_errors, ast=ast, sql=sql)
-            result.query_metadata = analyze_query(ast)
-            return result
+        parser = dialect_obj.parser(error_level=sqlglot.ErrorLevel.WARN)
+        tokens = dialect_obj.tokenize(sql)
+        asts = parser.parse(tokens, sql)
         
-        result = ValidationResult(valid=True, ast=ast, sql=sql)
-        result.query_metadata = analyze_query(ast)
+        ast = asts[0] if asts else None
+        
+        if parser.errors:
+            for error in parser.errors:
+                errors.extend(_classify_syntax_error(sql, error))
+                
+        result = ValidationResult(valid=len(errors) == 0, errors=errors, ast=ast, sql=sql)
+        if ast:
+            result.query_metadata = analyze_query(ast)
         return result
-    
+        
     except ParseError as e:
-        errors = _classify_syntax_error(sql, e)
+        for error in e.errors:
+            errors.extend(_classify_syntax_error(sql, error))
+            
         result = ValidationResult(valid=False, errors=errors, sql=sql)
-        try:
-            ast = sqlglot.parse_one(sql, read=dialect)
-            result.ast = ast
-            result.query_metadata = analyze_query(ast)
-        except ParseError:
-            pass
         return result
-    
-    except Exception as e:
-        # Catch-all for unexpected parsing errors (including tokenization errors)
-        # Still try to classify the error based on the SQL content
-        errors = []
-        error_message = str(e)
         
-        # Extract error code; use class fallback when specific code unknown
+    except Exception as e:
+        error_message = str(e)
         error_code = extract_error_code(error_message)
         taxonomy_category = get_taxonomy_category_with_fallback(error_code) or get_taxonomy_category(error_code)
         
@@ -240,6 +257,66 @@ def _has_unterminated_string(sql: str) -> bool:
     return single_quotes % 2 != 0 or double_quotes % 2 != 0
 
 
+def _find_column_errors(parsed: exp.Expression, schema: Dict[str, Dict[str, str]]) -> list:
+    """Find hallucinated columns, smartly ignoring those defined in CTEs or unresolved implicit scopes."""
+    errors = []
+    schema_lower = {t.lower(): {c.lower(): type_ for c, type_ in cols.items()} 
+                   for t, cols in schema.items()}
+                   
+    # If the query has CTEs, be more lenient with unqualified columns
+    has_ctes = bool(list(parsed.find_all(exp.CTE)))
+    
+    # Collect all base tables explicitly referenced in the AST
+    explicit_tables = []
+    for table in parsed.find_all(exp.Table):
+        explicit_tables.append(table.name.lower())
+        
+    for col in parsed.find_all(exp.Column):
+        # Skip columns inside CTE definitions, LLMs can do whatever they want there
+        if col.find_ancestor(exp.CTE):
+            continue
+            
+        col_name = col.name.lower()
+        table_name = col.table.lower() if col.table else None
+        
+        # If it's explicitly querying a schema table, strictly check it!
+        if table_name and table_name in schema_lower:
+            if col_name not in schema_lower[table_name] and col_name != "*":
+                error_code = extract_error_code(f"column {col_name} not found")
+                taxonomy_category = get_taxonomy_category(error_code)
+                errors.append(ValidationError(
+                    tag=SchemaErrorTags.HALLUCINATION_COLUMN,
+                    message=f"Column '{col.name}' could not be resolved in table '{col.table}'",
+                    context=col.name,
+                    error_code=error_code,
+                    taxonomy_category=taxonomy_category or "semantic",
+                ))
+        # If no explicit table is given, check if it exists in ANY of the base tables the query is touching
+        elif not table_name:
+            if col_name == "*":
+                continue
+                
+            found = False
+            for t in explicit_tables:
+                if t in schema_lower and col_name in schema_lower[t]:
+                    found = True
+                    break
+            
+            # If we didn't find the column, AND we don't have CTEs to bail us out, report it.
+            if not found and not has_ctes and explicit_tables:
+                error_code = extract_error_code(f"column {col_name} not found")
+                taxonomy_category = get_taxonomy_category(error_code)
+                errors.append(ValidationError(
+                    tag=SchemaErrorTags.HALLUCINATION_COLUMN,
+                    message=f"Column '{col.name}' could not be resolved in any targeted table",
+                    context=col.name,
+                    error_code=error_code,
+                    taxonomy_category=taxonomy_category or "semantic",
+                ))
+                
+    return errors
+
+
 def validate_schema(
     sql: str,
     schema: Dict[str, Dict[str, str]],
@@ -248,13 +325,10 @@ def validate_schema(
     """Validate SQL against schema (tables/columns); requires valid syntax first."""
     syntax_result = validate_syntax(sql, dialect=dialect)
     if not syntax_result.valid:
-        # Return syntax errors immediately - can't validate schema on invalid SQL
         return syntax_result
     
-    # Get the parsed AST from syntax validation
     parsed = syntax_result.ast
     if parsed is None:
-        # This shouldn't happen if syntax_result.valid is True, but handle it
         error = ValidationError(
             tag=SyntaxErrorTags.SYNTAX_ERROR,
             message="Failed to parse SQL for schema validation",
@@ -274,30 +348,9 @@ def validate_schema(
             taxonomy_category=taxonomy_category or "semantic",
             affected_clauses=["FROM"],
         ))
-    if missing_tables:
-        result = ValidationResult(valid=False, errors=errors, ast=parsed, sql=sql)
-        result.query_metadata = analyze_query(parsed)
-        return result
-    try:
-        optimize(
-            parsed,
-            schema=schema,
-            dialect=dialect,
-            validate_qualify_columns=True,
-        )
-    except sqlglot.errors.OptimizeError as e:
-        column_errors = _classify_schema_error(str(e), ast=parsed)
-        errors.extend(column_errors)
-    except Exception as e:
-        # Catch other optimization errors
-        error_code = extract_error_code(str(e))
-        taxonomy_category = get_taxonomy_category(error_code)
-        errors.append(ValidationError(
-            tag=SchemaErrorTags.UNKNOWN_ERROR,
-            message=str(e),
-            error_code=error_code,
-            taxonomy_category=taxonomy_category or "semantic",
-        ))
+        
+    column_errors = _find_column_errors(parsed, schema)
+    errors.extend(column_errors)
     
     result = ValidationResult(
         valid=len(errors) == 0,
@@ -312,8 +365,11 @@ def validate_schema(
 def _check_tables_exist(parsed: exp.Expression, schema: Dict) -> list:
     missing = []
     schema_lower = {k.lower(): v for k, v in schema.items()}
+    cte_names = {cte.alias.lower() for cte in parsed.find_all(exp.CTE)}
+    
     for table in parsed.find_all(exp.Table):
-        if table.name.lower() not in schema_lower:
+        t_name = table.name.lower()
+        if t_name and t_name not in schema_lower and t_name not in cte_names:
             missing.append(table.name)
     
     return missing
