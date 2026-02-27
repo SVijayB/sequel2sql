@@ -30,7 +30,7 @@ def validate_syntax(
 ) -> ValidationResult:
     """Validate SQL syntax with sqlglot, returning all parsing and silent errors."""
     if isinstance(sql, list):
-        sql = sql[0]
+        sql = sql[0] if sql else ""
     elif not isinstance(sql, str):
         sql = str(sql)
         
@@ -60,7 +60,13 @@ def validate_syntax(
         
         if parser.errors:
             for error in parser.errors:
-                errors.extend(_classify_syntax_error(sql, error))
+                new_errors = _classify_syntax_error(sql, error)
+                for ne in new_errors:
+                    # Deduplicate trailing comma errors
+                    if ne.tag == SyntaxErrorTags.TRAILING_DELIMITER:
+                         if any(e.tag == SyntaxErrorTags.TRAILING_DELIMITER and e.location == ne.location for e in errors):
+                             continue
+                    errors.append(ne)
                 
         result = ValidationResult(valid=len(errors) == 0, errors=errors, ast=ast, sql=sql)
         if ast:
@@ -69,7 +75,12 @@ def validate_syntax(
         
     except ParseError as e:
         for error in e.errors:
-            errors.extend(_classify_syntax_error(sql, error))
+            new_errors = _classify_syntax_error(sql, error)
+            for ne in new_errors:
+                if ne.tag == SyntaxErrorTags.TRAILING_DELIMITER:
+                     if any(e.tag == SyntaxErrorTags.TRAILING_DELIMITER and e.location == ne.location for e in errors):
+                         continue
+                errors.append(ne)
             
         result = ValidationResult(valid=False, errors=errors, sql=sql)
         return result
@@ -268,8 +279,12 @@ def _find_column_errors(parsed: exp.Expression, schema: Dict[str, Dict[str, str]
     
     # Collect all base tables explicitly referenced in the AST
     explicit_tables = []
+    alias_to_table = {}
     for table in parsed.find_all(exp.Table):
-        explicit_tables.append(table.name.lower())
+        t_name = table.name.lower()
+        explicit_tables.append(t_name)
+        if table.alias:
+            alias_to_table[table.alias.lower()] = t_name
         
     for col in parsed.find_all(exp.Column):
         # Skip columns inside CTE definitions, LLMs can do whatever they want there
@@ -278,6 +293,10 @@ def _find_column_errors(parsed: exp.Expression, schema: Dict[str, Dict[str, str]
             
         col_name = col.name.lower()
         table_name = col.table.lower() if col.table else None
+        
+        # Resolve alias if present
+        if table_name and table_name in alias_to_table:
+            table_name = alias_to_table[table_name]
         
         # If it's explicitly querying a schema table, strictly check it!
         if table_name and table_name in schema_lower:
@@ -296,19 +315,29 @@ def _find_column_errors(parsed: exp.Expression, schema: Dict[str, Dict[str, str]
             if col_name == "*":
                 continue
                 
-            found = False
-            for t in explicit_tables:
+            found_in = []
+            for t in set(explicit_tables): 
                 if t in schema_lower and col_name in schema_lower[t]:
-                    found = True
-                    break
+                    found_in.append(t)
             
             # If we didn't find the column, AND we don't have CTEs to bail us out, report it.
-            if not found and not has_ctes and explicit_tables:
+            if not found_in and not has_ctes and explicit_tables:
                 error_code = extract_error_code(f"column {col_name} not found")
                 taxonomy_category = get_taxonomy_category(error_code)
                 errors.append(ValidationError(
                     tag=SchemaErrorTags.HALLUCINATION_COLUMN,
                     message=f"Column '{col.name}' could not be resolved in any targeted table",
+                    context=col.name,
+                    error_code=error_code,
+                    taxonomy_category=taxonomy_category or "semantic",
+                ))
+            elif len(found_in) > 1:
+                # Ambiguous column! Exists in multiple joined tables
+                error_code = extract_error_code(f"column reference {col_name} is ambiguous")
+                taxonomy_category = get_taxonomy_category(error_code)
+                errors.append(ValidationError(
+                    tag=SchemaErrorTags.AMBIGUOUS_COLUMN,
+                    message=f"Column reference '{col.name}' is ambiguous. It exists in multiple tables: {', '.join(found_in)}",
                     context=col.name,
                     error_code=error_code,
                     taxonomy_category=taxonomy_category or "semantic",
