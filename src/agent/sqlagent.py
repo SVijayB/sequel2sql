@@ -50,7 +50,7 @@ SUPPORTED_MODELS = {
     "google": "google-gla:gemini-3-flash-preview",
     "codestral": "mistral:codestral-latest",
 }
-DEFAULT_MODEL = "mistral:mistral-large-latest"
+DEFAULT_MODEL = "mistral:codestral-latest"
 
 
 # Logfire configuration (make sure to set LOGFIRE_TOKEN in .env for logging to work)
@@ -78,6 +78,8 @@ def get_database_deps(
     user: str = "root",
     password: str = "123123",
     max_return_values: int = 200,
+    pool_size: int = 5,
+    max_overflow: int = 10,
 ) -> AgentDeps:
     """Create AgentDeps with a Database instance for the specified database.
 
@@ -88,6 +90,8 @@ def get_database_deps(
             user: PostgreSQL username (default: root)
             password: PostgreSQL password (default: 123123)
             max_return_values: Maximum number of result values to return (default: 200)
+            pool_size: SQLAlchemy connection pool size (default: 5)
+            max_overflow: Max connections beyond pool_size (default: 10)
 
     Returns:
             AgentDeps instance ready to be passed to the agent
@@ -98,6 +102,8 @@ def get_database_deps(
         port=port,
         user=user,
         password=password,
+        pool_size=pool_size,
+        max_overflow=max_overflow,
     )
     return AgentDeps(database=database, max_return_values=max_return_values)
 
