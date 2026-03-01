@@ -150,108 +150,145 @@ class Sequel2SQLClient:
             tool_calls_limit=BENCHMARK_TOOL_CALLS_LIMIT,
         )
 
+        deps = None
         with logfire.span(
             "benchmark.sequel2sql",
             db_id=db_id,
             query=query,
         ) as span:
+          try:
             for attempt in range(1, max_retries + 1):
-                try:
-                    self.total_requests += 1
+              try:
+                self.total_requests += 1
 
-                    # Build database deps for this specific database
-                    deps = get_database_deps(db_id)
+                # Build database deps with a single-connection pool.
+                # pool_size=1 ensures preprocess_sql temp tables (which
+                # are PostgreSQL session-scoped) stay visible to
+                # execute_sql_query — both use the same physical conn.
+                deps = get_database_deps(
+                    db_id, pool_size=1, max_overflow=0
+                )
 
-                    # Run preprocess_sql so the live DB matches preprocess_schema.
-                    # This ensures validate_query (EXPLAIN) sees the same tables
-                    # the benchmark expects. The evaluation phase will re-run them.
-                    if preprocess_sql:
-                        self.logger.debug(
-                            f"Running {len(preprocess_sql)} preprocess_sql statement(s) for {db_id}"
-                        )
-                        _execute_raw_statements(deps.database.engine, preprocess_sql)
-
-                    try:
-                        # Run the agent pipeline with capped tool usage
-                        result = agent.run_sync(
-                            user_message,
-                            deps=deps,
-                            usage_limits=usage_limits,
-                        )
-                    finally:
-                        # Clean up temp objects so the DB is restored for
-                        # the evaluation phase (which re-runs preprocess_sql itself)
-                        if clean_up_sql:
-                            self.logger.debug(
-                                f"Running {len(clean_up_sql)} clean_up_sql statement(s) for {db_id}"
-                            )
-                            try:
-                                _execute_raw_statements(
-                                    deps.database.engine, clean_up_sql
-                                )
-                            except Exception as cleanup_err:
-                                self.logger.warning(
-                                    f"clean_up_sql failed (non-fatal): {cleanup_err}"
-                                )
-
-                    self.successful_requests += 1
-                    span.set_attribute("attempts", attempt)
-                    time.sleep(2)  # respect rate limits
-                    return f"```sql\n{result.output.sql}\n```"
-
-                except UsageLimitExceeded as e:
-                    # Agent exhausted its tool-call / request budget.
-                    # This is NOT a transient error — retrying will hit
-                    # the same limit. Treat as a hard failure.
-                    self.logger.warning(
-                        f"⚠️  Usage limit exceeded for {db_id}: {e}"
-                    )
-                    last_error = e
-                    break  # skip retries
-
-                except Exception as e:
-                    last_error = e
+                # Run preprocess_sql so the live DB matches
+                # preprocess_schema.  This ensures validate_query
+                # (EXPLAIN) sees the same tables the benchmark expects.
+                # The evaluation phase will re-run them.
+                if preprocess_sql:
                     self.logger.debug(
-                        f"Pipeline call failed (attempt {attempt}/{max_retries}): {str(e)[:120]}"
+                        f"Running {len(preprocess_sql)} "
+                        f"preprocess_sql statement(s) for {db_id}"
                     )
-                    error_str = str(e).lower()
+                    _execute_raw_statements(
+                        deps.database.engine, preprocess_sql
+                    )
+                    # Re-reflect so describe_schema sees tables
+                    # created by preprocess_sql
+                    deps.database.metadata.clear()
+                    deps.database.metadata.reflect(
+                        bind=deps.database.engine
+                    )
 
-                    # Exponential backoff: base 2s, doubles each attempt,
-                    # capped at 60s
-                    backoff = min(2 ** attempt, 60)
+                try:
+                    # Run the agent pipeline with capped tool usage
+                    result = agent.run_sync(
+                        user_message,
+                        deps=deps,
+                        usage_limits=usage_limits,
+                    )
+                finally:
+                    # Clean up temp objects so the DB is restored for
+                    # the evaluation phase (which re-runs preprocess_sql
+                    # itself)
+                    if clean_up_sql:
+                        self.logger.debug(
+                            f"Running {len(clean_up_sql)} "
+                            f"clean_up_sql statement(s) for {db_id}"
+                        )
+                        try:
+                            _execute_raw_statements(
+                                deps.database.engine, clean_up_sql
+                            )
+                        except Exception as cleanup_err:
+                            self.logger.warning(
+                                "clean_up_sql failed (non-fatal): "
+                                f"{cleanup_err}"
+                            )
 
-                    if (
-                        "429" in error_str
-                        or "rate" in error_str
-                        or "quota" in error_str
-                    ):
-                        wait = min(60 * attempt, 240)
-                        self.logger.warning(
-                            f"⚠️  Rate limit hit. Waiting {wait}s before retry {attempt}/{max_retries}..."
-                        )
-                        time.sleep(wait)
-                    elif (
-                        "500" in error_str
-                        or "503" in error_str
-                        or "server" in error_str
-                    ):
-                        self.logger.warning(
-                            f"⚠️  Server error. Waiting {backoff}s before retry {attempt}/{max_retries}..."
-                        )
-                        time.sleep(backoff)
-                    elif attempt < max_retries:
-                        time.sleep(backoff)
+                self.successful_requests += 1
+                span.set_attribute("attempts", attempt)
+                time.sleep(2)  # respect rate limits
+                return f"```sql\n{result.output.sql}\n```"
+
+              except UsageLimitExceeded as e:
+                # Agent exhausted its tool-call / request budget.
+                # This is NOT a transient error — retrying will hit
+                # the same limit. Treat as a hard failure.
+                self.logger.warning(
+                    f"⚠️  Usage limit exceeded for {db_id}: {e}"
+                )
+                last_error = e
+                break  # skip retries
+
+              except Exception as e:
+                last_error = e
+                self.logger.debug(
+                    f"Pipeline call failed (attempt "
+                    f"{attempt}/{max_retries}): {str(e)[:120]}"
+                )
+                error_str = str(e).lower()
+
+                # Exponential backoff: base 2s, doubles each attempt,
+                # capped at 60s
+                backoff = min(2 ** attempt, 60)
+
+                if (
+                    "429" in error_str
+                    or "rate" in error_str
+                    or "quota" in error_str
+                ):
+                    wait = min(60 * attempt, 240)
+                    self.logger.warning(
+                        f"⚠️  Rate limit hit. Waiting {wait}s "
+                        f"before retry {attempt}/{max_retries}..."
+                    )
+                    time.sleep(wait)
+                elif (
+                    "500" in error_str
+                    or "503" in error_str
+                    or "server" in error_str
+                ):
+                    self.logger.warning(
+                        f"⚠️  Server error. Waiting {backoff}s "
+                        f"before retry {attempt}/{max_retries}..."
+                    )
+                    time.sleep(backoff)
+                elif attempt < max_retries:
+                    time.sleep(backoff)
+
+              finally:
+                # Dispose engine after each attempt to close the
+                # physical connection, which ends the PostgreSQL
+                # session and auto-drops any lingering temp tables.
+                if deps is not None:
+                    deps.database.engine.dispose()
+                    deps = None
 
             self.failed_requests += 1
             span.set_attribute("attempts", attempt)
             span.set_attribute("error", str(last_error)[:240])
             self.logger.error(
-                f"❌ Pipeline call failed after {attempt} attempt(s). "
-                f"Last error: {str(last_error)[:120]}"
+                f"❌ Pipeline call failed after {attempt} "
+                f"attempt(s). Last error: {str(last_error)[:120]}"
             )
             raise RuntimeError(
-                f"Pipeline call failed after {attempt} attempt(s): {last_error}"
+                f"Pipeline call failed after {attempt} "
+                f"attempt(s): {last_error}"
             )
+          finally:
+            # Safety net: dispose if not already done
+            # (e.g. early return path)
+            if deps is not None:
+                deps.database.engine.dispose()
 
     def get_statistics(self) -> Dict[str, Any]:
         """Get usage statistics (same schema as LLMClient)."""

@@ -116,6 +116,8 @@ class Database:
         port: int = 5432,
         user: str = "root",
         password: str = "123123",
+        pool_size: int = 5,
+        max_overflow: int = 10,
     ):
         """Initialize database connection and reflect schema.
 
@@ -125,9 +127,13 @@ class Database:
             port: PostgreSQL port (default: 5432)
             user: PostgreSQL username (default: root)
             password: PostgreSQL password (default: 123123)
+            pool_size: SQLAlchemy connection pool size (default: 5)
+            max_overflow: Max connections beyond pool_size (default: 10)
         """
         db_uri = f"postgresql://{user}:{password}@{host}:{port}/{database_name}"
-        self.engine: Engine = create_engine(db_uri)
+        self.engine: Engine = create_engine(
+            db_uri, pool_size=pool_size, max_overflow=max_overflow
+        )
         self.metadata = MetaData()
         self.metadata.reflect(bind=self.engine)
         self.last_query: QueryResult | None = None
