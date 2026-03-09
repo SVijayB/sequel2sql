@@ -274,7 +274,7 @@ syntax_fixer_agent = Agent(
 
 @agent.tool()
 def execute_sql_query(ctx: RunContext[AgentDeps], sql: str) -> DBQueryResponse:
-    """Execute the given SQL SELECT query on the connected database and return the result.
+    """Execute the given SQL SELECT query on the connected database and return the result, this can also include CTEs but the single returning statement should be a SELECT
 
     Args:
         ctx: Run context containing database connection and configuration

@@ -174,7 +174,7 @@ class Database:
 
         if first_token not in _ALLOWED_FIRST_TOKENS:
             raise InvalidQueryError(
-                f"Only SELECT / WITH / EXPLAIN queries are allowed (got {first_token})"
+                f"This tool allows - Only SELECT / WITH / EXPLAIN queries are allowed (got {first_token})"
             )
 
         # Block WITH ... INSERT / UPDATE / DELETE (CTE + DML)
