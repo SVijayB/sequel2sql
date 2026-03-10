@@ -11,7 +11,7 @@ a single ```sql ... ``` block, which the benchmark post-processor can
 extract identically to responses from Google/Mistral.
 """
 
-import concurrent.futures
+import asyncio
 import importlib.util
 import sys
 import time
@@ -20,7 +20,6 @@ from typing import Any, Dict
 
 import logfire
 import psycopg2
-from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.usage import UsageLimits
 
 from .logger_config import get_logger
@@ -28,8 +27,8 @@ from .logger_config import get_logger
 # ---------------------------------------------------------------------------
 # Benchmark agent limits — prevent runaway tool-calling loops
 # ---------------------------------------------------------------------------
-BENCHMARK_REQUEST_LIMIT = 10  # max LLM round-trips per query
-BENCHMARK_TOOL_CALLS_LIMIT = 10  # max successful tool invocations per query
+BENCHMARK_REQUEST_LIMIT = 25  # max LLM round-trips per query
+BENCHMARK_TOOL_CALLS_LIMIT = 25  # max successful tool invocations per query
 
 # Per-query wall-clock timeout for the agent run (seconds).
 # Prevents a single query from hanging the whole benchmark run.
@@ -126,6 +125,11 @@ class Sequel2SQLClient:
         self.model_config = model_config
         self.logger = get_logger()
 
+        # Persistent event loop — keeps the agent's internal HTTP client
+        # alive across sequential benchmark queries.  asyncio.run() would
+        # close the loop after each call, killing the shared client.
+        self._loop = asyncio.new_event_loop()
+
         # Statistics (mirrors LLMClient)
         self.total_requests = 0
         self.successful_requests = 0
@@ -205,32 +209,24 @@ class Sequel2SQLClient:
                         invalidate_schema_cache(deps.database.engine)
 
                     try:
-                        # Run the agent pipeline with capped tool usage.
-                        # NOTE: do NOT use the executor as a context manager
-                        # (`with` calls shutdown(wait=True) on exit, which
-                        # blocks until the thread finishes and defeats the
-                        # timeout entirely). Instead create it explicitly and
-                        # call shutdown(wait=False) so a timed-out thread is
-                        # simply abandoned.
-                        executor = concurrent.futures.ThreadPoolExecutor(
-                            max_workers=1, thread_name_prefix="agent_run"
-                        )
-                        future = executor.submit(
-                            agent.run_sync,
-                            user_message,
-                            deps=deps,
-                            usage_limits=usage_limits,
-                        )
-                        try:
-                            result = future.result(timeout=AGENT_RUN_TIMEOUT)
-                        except concurrent.futures.TimeoutError:
-                            executor.shutdown(wait=False, cancel_futures=True)
-                            raise TimeoutError(
-                                f"Agent run timed out after "
-                                f"{AGENT_RUN_TIMEOUT}s for db_id={db_id}"
+                        # Run the agent with a wall-clock timeout.
+                        # Using asyncio.run + wait_for keeps everything
+                        # in a single fresh event loop per call, avoiding
+                        # the "bound to a different event loop" errors
+                        # that the old ThreadPoolExecutor approach caused.
+                        async def _run_agent():
+                            return await asyncio.wait_for(
+                                agent.run(
+                                    user_message,
+                                    deps=deps,
+                                    usage_limits=usage_limits,
+                                ),
+                                timeout=AGENT_RUN_TIMEOUT,
                             )
-                        finally:
-                            executor.shutdown(wait=False, cancel_futures=True)
+
+                        result = self._loop.run_until_complete(
+                            _run_agent()
+                        )
                     finally:
                         # Restore DB state via psycopg2 — same reasoning as above.
                         if clean_up_sql:
@@ -248,14 +244,6 @@ class Sequel2SQLClient:
                     time.sleep(2)  # respect rate limits
                     sql_text = result.output.sql.strip()
                     return f"```sql\n{sql_text}\n```"
-
-                except UsageLimitExceeded as e:
-                    # Agent exhausted its tool-call / request budget.
-                    # This is NOT a transient error — retrying will hit
-                    # the same limit. Treat as a hard failure.
-                    self.logger.warning(f"⚠️  Usage limit exceeded for {db_id}: {e}")
-                    last_error = e
-                    break  # skip retries
 
                 except Exception as e:
                     last_error = e

@@ -232,6 +232,12 @@ def main():
         choices=list(PROVIDERS.keys()),
         help=f"LLM provider to use. Choices: {', '.join(PROVIDERS.keys())}. Default: {DEFAULT_PROVIDER}",
     )
+    parser.add_argument(
+        "--select-only",
+        action="store_true",
+        default=False,
+        help="Run only on SELECT-statement queries (filters out non-SELECT queries from the dataset).",
+    )
     args = parser.parse_args()
     # provider may be overridden interactively below when None
     cli_provider = args.provider if "--provider" in " ".join(sys.argv[1:]) else None
@@ -263,14 +269,14 @@ def main():
     # ========== Main Menu Loop ==========
     query_limit = args.limit  # From command line
     query_index = None  # For single-query mode (0-based)
-    select_only = False  # For SELECT-only mode
+    select_only = args.select_only  # From CLI flag or interactive menu
     output_dir = None
     checkpoint_manager = None
     resume_mode = False
     model_config = get_model_config(provider) if cli_provider is not None else None
 
-    # If command line limit provided, skip menu and start directly
-    if query_limit is not None:
+    # If command line limit or --select-only provided, skip menu and start directly
+    if query_limit is not None or select_only:
         # If no explicit --provider given on CLI, ask interactively
         if model_config is None:
             selected_provider = ask_provider(PROVIDERS)
@@ -288,8 +294,34 @@ def main():
         logger.info("SEQUEL2SQL Benchmark Starting (command-line mode)")
         logger.info("=" * 70)
 
-        total_queries = min(query_limit, total_available_queries)
-        logger.info(f"⚠️  Running SUBSET MODE with {total_queries} queries")
+        # When --select-only, count SELECT queries and cap limit accordingly
+        if select_only:
+            import json as _json
+
+            with open(data_file, "r") as _f:
+                _all_data = [_json.loads(line) for line in _f]
+            _select_count = sum(
+                1
+                for d in _all_data
+                if d.get("issue_sql", [""])
+                and d["issue_sql"][0].strip().upper().startswith("SELECT")
+            )
+            total_queries = (
+                min(query_limit, _select_count)
+                if query_limit is not None
+                else _select_count
+            )
+            logger.info(
+                f"⚠️  Running SELECT-ONLY MODE with {total_queries} queries "
+                f"(from {_select_count} available SELECT queries)"
+            )
+        else:
+            total_queries = (
+                min(query_limit, total_available_queries)
+                if query_limit is not None
+                else total_available_queries
+            )
+            logger.info(f"⚠️  Running SUBSET MODE with {total_queries} queries")
 
         display_config_summary(model_config, total_queries)
 
@@ -301,15 +333,16 @@ def main():
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Output directory: {output_dir}")
 
+        pipeline_type = "select_only" if select_only else "subset"
         checkpoint_manager = CheckpointManager(output_dir)
         checkpoint_manager.set_run_config(
             provider=provider if cli_provider is not None else selected_provider,
             model_id=model_config["model_id"],
             model_name=model_config["display_name"],
-            pipeline_type="subset",
+            pipeline_type=pipeline_type,
             query_limit=total_queries,
         )
-        logger.info("Starting new run...")
+        logger.info(f"Starting new {pipeline_type} run...")
     else:
         # Interactive menu
         while True:

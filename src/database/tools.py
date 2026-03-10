@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel
 from pydantic_ai import ModelRetry, RunContext
+from sqlalchemy import exc as sa_exc
 
 from .database import InvalidQueryError
 from .deps import AgentDeps
@@ -58,6 +59,12 @@ def execute_sql(ctx: RunContext[AgentDeps], sql: str) -> DBQueryResponse:
         result = ctx.deps.database.execute_sql(sql)
     except InvalidQueryError as e:
         raise ModelRetry(str(e)) from e
+    except (sa_exc.ProgrammingError, sa_exc.OperationalError, sa_exc.DatabaseError) as e:
+        db_msg = e.orig if hasattr(e, "orig") and e.orig else str(e)
+        raise ModelRetry(
+            f"The query failed with a database error:\n{db_msg}\n\n"
+            "Inspect the error, fix the SQL, and try again."
+        ) from e
 
     if not result.rows:
         return DBQueryResponse(note="No results")

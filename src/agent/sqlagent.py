@@ -79,11 +79,12 @@ def _build_nvidia_model() -> OpenAIChatModel:
 
 
 # Pick DEFAULT_MODEL value from .env, default to Mistral if not set or invalid
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "mistral").lower()
+_model_key = os.getenv("DEFAULT_MODEL", "mistral").lower()
+DEFAULT_MODEL = SUPPORTED_MODELS.get(_model_key, _model_key)
 
 
 # Logfire configuration (make sure to set LOGFIRE_TOKEN in .env for logging to work)
-logfire.configure(send_to_logfire="if-token-present")
+logfire.configure(send_to_logfire="if-token-present", environment="aravindh-bm")
 logfire.instrument_pydantic_ai()
 
 # =============================================================================
@@ -244,6 +245,13 @@ agent = Agent(
     model_settings={"parallel_tool_calls": False},
 )
 
+# Gemini 3 thinking config — medium reasoning budget
+if _model_key in ("google",):
+	agent.model_settings = {
+		"parallel_tool_calls": False,
+		"google_thinking_config": {"thinking_level": "medium"},
+	}
+
 # Web UI agent
 webui_agent = Agent(
     DEFAULT_MODEL,
@@ -272,7 +280,7 @@ syntax_fixer_agent = Agent(
 # =============================================================================
 
 
-@agent.tool()
+@agent.tool(retries=1)
 def execute_sql_query(ctx: RunContext[AgentDeps], sql: str) -> DBQueryResponse:
     """Execute the given SQL SELECT query on the connected database and return the result, this can also include CTEs but the single returning statement should be a SELECT
 
@@ -540,11 +548,19 @@ webui_agent.tool_plain(name="find_similar_confirmed_fixes_tool")(
 )
 
 # --- benchmark agent tools ---
-agent.tool(name="validate_query")(validate_query)
-agent.tool_plain(name="get_error_taxonomy_skill")(get_error_taxonomy_skill)
-agent.tool_plain(name="find_similar_confirmed_fixes_tool")(
-    find_similar_confirmed_fixes_tool
+# Set BENCHMARK_FULL_TOOLS=true to re-enable validate_query and
+# find_similar_confirmed_fixes_tool on the benchmark agent.
+_BENCHMARK_FULL_TOOLS = (
+	os.getenv("BENCHMARK_FULL_TOOLS", "").lower() == "true"
 )
+
+if _BENCHMARK_FULL_TOOLS:
+	agent.tool(name="validate_query")(validate_query)
+	agent.tool_plain(name="find_similar_confirmed_fixes_tool")(
+		find_similar_confirmed_fixes_tool
+	)
+
+#agent.tool_plain(name="get_error_taxonomy_skill")(get_error_taxonomy_skill)
 
 
 # =============================================================================
